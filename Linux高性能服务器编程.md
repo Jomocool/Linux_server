@@ -359,3 +359,348 @@ int main(void)
 - -l(小写L): 指定链接时需要的库，去掉前缀和后缀 
 
 ![image-20231028223943016](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231028223943016.png)
+
+
+
+## 5. 动态库制作和使用
+
+![image-20231030001622934](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231030001622934.png)
+
+1. **动态库制作：**
+
+   步骤1：生成目标文件，此时要加编译选项：-fPIC(fpic)
+
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_lib$ ls
+   > add.c  add.h  div.c  div.h  mul.c  mul.h  sub.c  sub.h  test.c
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_lib$ gcc -fPIC -c *.c
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_lib$ ls
+   > add.c  add.h  add.o  div.c  div.h  div.o  mul.c  mul.h  mul.o  sub.c  sub.h  sub.o  test.c  test.o
+
+   参数：-fPIC创建与地质无关的编译程序（pic，position independent code），是为了能够在多个应用程序间共享
+
+   步骤2：生成共享库，此时要加链接器选项：-shared（指定生成动态链接库）
+
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_lib$ gcc -fPIC -c *.c
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_lib$ ls
+   > add.c  add.h  add.o  div.c  div.h  div.o  mul.c  mul.h  mul.o  sub.c  sub.h  sub.o  test.c  test.o
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_lib$ gcc -shared *.o -o libaa.so
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_lib$ ls
+   > add.c  add.h  add.o  div.c  div.h  div.o  libaa.so  mul.c  mul.h  mul.o  sub.c  sub.h  sub.o  test.c  test.o
+
+   步骤3：通过nm命令查看对应的函数
+
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_lib$ nm libaa.so
+   > 0000000000001199 T add
+   > 0000000000004048 b completed.0
+   >                  w __cxa_finalize@GLIBC_2.2.5
+   > 00000000000010e0 t deregister_tm_clones
+   > 00000000000011b1 T div
+   > 0000000000001150 t __do_global_dtors_aux
+   > 0000000000003e18 d __do_global_dtors_aux_fini_array_entry
+   > 0000000000004040 d __dso_handle
+   > 0000000000003e20 d _DYNAMIC
+   > 00000000000012ac t _fini
+   > 0000000000001190 t frame_dummy
+   > 0000000000003e10 d __frame_dummy_init_array_entry
+   > 0000000000002190 r __FRAME_END__
+   > 0000000000004000 d _GLOBAL_OFFSET_TABLE_
+   >                  w __gmon_start__
+   > 0000000000002030 r __GNU_EH_FRAME_HDR
+   > 0000000000001000 t _init
+   >                  w _ITM_deregisterTMCloneTable
+   >                  w _ITM_registerTMCloneTable
+   > 00000000000011f5 T main
+   > 00000000000011c8 T mul
+   >                  U printf@GLIBC_2.2.5
+   > 0000000000001110 t register_tm_clones
+   > 00000000000011df T sub
+   > 0000000000004048 d __TMC_END__
+
+2. **动态库测试：**
+
+   > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ gcc test.c -L. -I. -laa
+
+   报错：
+
+   ![image-20231030223342495](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231030223342495.png)
+
+   原因：
+
+   - 当系统加载可执行代码时，能够知道其所依赖的库的名字，但是还需要知道绝对路径。此时就需要系统动态载入器（dynamic linker/loader）
+   - 对于elf格式的可执行程序，是由ld-linux.so*来完成的，它先后搜索elf文件的DT_RPATH段——环境变量LD_LIBRARY_PATH —— /etc/ld.so.cache文件列表 —— /lib/,/user/lib目录找到库文件后将其载入内存
+
+3. **如何让系统找到动态库：**
+
+   - 拷贝自己制作的共享库到/lib或者/usr/lib（不能是/lib64目录）
+
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ sudo cp libaa.so /lib
+     >
+     > #不用指明链接库的目录了，因为会默认从/lib或/usr/lib/目录下去找同名库
+     >
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ gcc test.c  -I. -laa
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ ./a.out 
+     > x + y = 20
+     > x - y = 10
+     > x * y = 75
+     > x / y = 3
+     
+   - 临时设置LD_LIBRARY_PATH:
+   
+     > export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:库路径
+   
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/jomo/linux_server/gcc_learn/share_test
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ ./a.out 
+     > x + y = 20
+     > x - y = 10
+     > x * y = 75
+     > x / y = 3
+   
+   - 永久设置
+   
+     > #追加export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/jomo/linux_server/gcc_learn/share_test到文件末尾
+     >
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ vim ~/.bashrc 
+     >
+     > #使环境变量生效
+     >
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ source ~/.bashrc 
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ ./a.out 
+     > x + y = 20
+     > x - y = 10
+     > x * y = 75
+     > x / y = 3
+   
+   - 将其添加到/etc/ld.so.conf文件中
+   
+     编辑/etc/ld.so.conf文件，加入库文件所在目录的路径
+   
+     运行sudo ldconfig -v，该命令会重建/etc/ld.so.cache文件
+   
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ sudo vim /etc/ld.so.conf
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ echo $LD_LIBRARY_PATH 
+     > :/home/jomo/linux_server/gcc_learn/share_test:/home/jomo/linux_server/gcc_learn/share_test
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ unset LD_LIBRARY_PATH 
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ echo $LD_LIBRARY_PATH 
+     >
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ ./a.out 
+     > ./a.out: error while loading shared libraries: libaa.so: cannot open shared object file: No such file or directory
+     >
+     > #使生效
+     >
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ sudo ldconfig -v
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ ./a.out 
+     > x + y = 20
+     > x - y = 10
+     > x * y = 75
+     > x / y = 3
+   
+   - 使用符号链接，但是一定要使用绝对路径
+   
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ sudo ln -s /home/jomo/linux_server/gcc_learn/share_test/libaa.so /lib/libaa.so
+     > jomo@jomo-virtual-machine:~/linux_server/gcc_learn/share_test$ ./a.out 
+     > x + y = 20
+     > x - y = 10
+     > x * y = 75
+     > x / y = 3
+
+
+
+## 6. GDB调试器
+
+**GDB简介：**
+
+![image-20231104122445761](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104122445761.png)
+
+**生成调试信息**
+
+GDB主要是调试C/C++程序。要调试C/C++程序，首先在编译时，必须要把调试信息加到可执行文件中。使用编译器（cc/gcc/g++）的-g参数可以做到这一点。如：
+
+> gcc -g hello.c -o hello
+>
+> g++ -g hello.cpp -o hello
+
+如果没有-g，你将看不见程序的函数名、变量名，所代替的全是运行时的内存地址
+
+
+
+**启动GDB**
+
+测试程序：test.c
+
+```c
+#include <stdio.h>
+
+void fun(void)
+{
+        int i = 0;
+        for (i=0; i<10;i++)
+        {
+                printf("func==> i = %d\n",i);
+        }
+}
+
+int main(int argc, char *argv[])
+{
+        int i = 0;
+
+        // 将传入的参数全部输出
+        for (i = 0; i<argc; i++)
+        {
+                printf("argv[%d]: %s\n",i,argv[i]);
+        }
+
+        fun();
+
+        printf("hello itcast\n");
+
+        return 0;
+}
+```
+
+
+
+- 启动gdb：gdb program
+
+  program就是你的执行文件，一般在当前目录下
+
+  ![image-20231104125832965](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104125832965.png)
+
+- 设置运行参数
+
+  set args 可指定运行时参数。（如：set args 10 20 30 40 50)
+
+  show args 可以查看设置好的运行参数
+
+  ![image-20231104130541914](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104130541914.png)
+
+- 启动程序
+
+  run：程序开始执行，如果有断点，停在第一个断点处
+
+  start：程序向下执行一行
+
+  ![image-20231104130606975](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104130606975.png)
+
+  ![image-20231104130631502](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104130631502.png)
+
+- 退出gdb：quit
+
+**显示源代码**
+
+用list命令来打印程序的源代码。默认打印0行
+
+- list linenum：打印第linenum行的上下文内容
+
+- list function：显示函数名为function的函数的源程序
+- list：显示当前行后面的源程序
+- list -：显示当前行前面的源程序
+
+一般是打印当前行的上5行和下5行，如果显示函数是上2行下8行，默认10行。也可以定制显示范围：
+
+- set listsize count：设置一次显示源代码的行数
+- show listsize：查看当前listsize的设置
+
+![image-20231104131622353](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104131622353.png)
+
+![image-20231104131729450](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104131729450.png)
+
+
+
+**断点操作**
+
+- 查看断点：
+
+  - info break
+  - info b
+  - i break
+  - i b
+
+  ![image-20231104132259611](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104132259611.png)
+
+  Num：断点编号
+
+  Type：断点类型
+
+  Disp：显示
+
+  Enb：enable，使能
+
+  Address：地址
+
+  What：相关信息：（函数、文件、行号）
+
+- 简单断点：
+
+  break 设置断点，可以简写为b
+
+  - b 10：设置断点，在源程序第10行
+  - b func：设置断点，在func函数如果处
+
+- 多文件设置断点
+
+  - break filename:linenum -- 在源文件filename的linenum行设断点
+  - break finename:function -- 在源文件的filen的function函数入口处设断点
+  - break class::function或(function(type,type)) -- 在类class的function函数的入口处设设断点（考虑到了函数重载）
+  - break namespace::class::function -- 在名称空间为namespace的类class的function函数的入口处设断点
+
+**条件断点**
+
+一般来说，为断点设置一个条件，使用if关键词，后面紧跟断点条件
+
+设置一个条件断点：
+
+> b test.c:8 if Value == 5
+
+![image-20231104150015485](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104150015485.png)
+
+
+
+**维护断点**
+
+![image-20231104150130853](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104150130853.png)
+
+![image-20231104150311172](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104150311172.png)
+
+
+
+**调试代码**
+
+![image-20231104150424205](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104150424205.png)
+
+
+
+**自动显示**
+
+![image-20231104150658031](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104150658031.png)
+
+
+
+**查看修改变量的值**
+
+![image-20231104151016975](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104151016975.png)
+
+
+
+## 7. Makefile
+
+**Makefile简介**
+
+![image-20231104175113716](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104175113716.png)
+
+
+
+**make主要解决的问题**
+
+![image-20231104175455155](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231104175455155.png)
+
+
+
+**Makefile文件命名规则**
+
+makefile 和 Makefile都可以，推荐使用Makefile
+
+
+
+**make工具安装**
+
+> sudo apt install make
