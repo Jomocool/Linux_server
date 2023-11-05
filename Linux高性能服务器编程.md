@@ -704,3 +704,334 @@ makefile 和 Makefile都可以，推荐使用Makefile
 **make工具安装**
 
 > sudo apt install make
+
+
+
+**Makefile语法规则**
+
+- 一条规则：
+
+  > 目标: 依赖文件列表
+  >
+  > <Tab>命令列表
+
+  Makefile基本规则三要素：
+
+  1. 目标：
+
+     通常是要产生的文件名称，目标可以是可执行文件或者其它obj文件，也可以是一个动作的名称
+
+  2. 依赖文件：
+
+     用来输入从而产生目标的文件
+
+     一个目标通常有几个依赖文件（可以没有）
+
+  3. 命令：
+
+     make执行的动作，一个规则可以含几个命令（可以没有）
+
+     有多个命令时，每个命令占一行
+
+  ```makefile
+  #目标是all，依赖文件列表是test1、test2，如果test1和test2存在，就会执行echo "hello all"
+  all:test1 test2
+          echo "hello all"
+  
+  test1:
+          echo "hello test1"
+  
+  test2:
+          echo "hello test2"
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/makefile_learn$ make -f 1.mk
+  > echo "hello test1"
+  > hello test1
+  > echo "hello test2"
+  > hello test2
+  > echo "hello all"
+  > hello all
+
+**make命令格式**
+
+make是一个命令工具，它解释Makefile中的指令（规则）
+
+> make \[-f file\]\[options\]\[targets\]
+
+![image-20231105112821223](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105112821223.png)
+
+![image-20231105113219778](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105113219778.png)
+
+![image-20231105115300195](C:/Users/86135/AppData/Roaming/Typora/typora-user-images/image-20231105115300195.png)
+
+
+
+**Makefile示例**
+
+- 最简单的Makefile
+
+  ```makefile
+  test:add.c sub.c mul.c div.c test.c
+  	gcc add.c sub.c mul.c div.c test.c -o test
+  ```
+
+  ![image-20231105115939327](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105115939327.png)
+
+  **缺点：**效率低，修改一个文件，所有文件都要重新编译一次
+
+- 第二个版本Makefile
+
+  ```makefile
+  #目标：test
+  #依赖文件列表：add.o sub.o mul.o div.o test.o
+  #命令：链接目标代码生成可执行文件
+  test:add.o sub.o mul.o div.o test.o
+          gcc add.o sub.o mul.o div.o test.o -o test
+  
+  add.o:add.c
+          gcc -c add.c -o add.o
+  
+  sub.o:sub.c
+          gcc -c sub.c -o sub.o
+  
+  mul.o:mul.c
+          gcc -c mul.c -o mul.o
+  
+  div.o:div.c
+          gcc -c div.c -o div.o
+  
+  test.0:test.c
+  		gcc -c test.c -o test.o
+  ```
+
+  ![image-20231105122434843](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105122434843.png)
+
+  只修改了add.c，因此第二次make后，只会执行add.c生成目标代码
+
+  ![image-20231105122514204](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105122514204.png)
+
+  
+
+**Makefile中的变量**
+
+Makefile使用变量类似宏定义，使用该变量，相当于内容替换，使用变量可以使Makefile易于维护，修改内容变得简单
+
+- 自定义变量
+
+  1. 定义变量方法：
+
+     变量名=变量值
+
+  2. 引用变量：
+
+     $(变量名)或${变量名}
+
+  3. makefile的变量名：
+
+     - makefile可以以数字开头
+     - 变量是大小写敏感的
+     - 变量一般都在makefile的头部定义
+     - 变量几乎可在makefile的任何地方使用 
+
+  使用变量后的第二版Makefile
+
+  ```makefile
+  OBJS = add.o sub.o mul.o div.o test.o
+  
+  test:$(OBJS)
+          gcc $(OBJS) -o test
+  
+  add.o:add.c
+          gcc -c add.c -o add.o
+  
+  sub.o:sub.c
+          gcc -c sub.c -o sub.o
+  
+  mul.o:mul.c
+          gcc -c mul.c -o mul.o
+  
+  div.o:div.c
+          gcc -c div.c -o div.o
+  
+  test.o:test.c
+          gcc -c test.c -o test.o 
+  
+  clean:
+  		rm -rf $(OBJS) test
+  ```
+
+  ![image-20231105122923505](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105122923505.png)
+
+  
+
+  make clean会执行Makefile中的clean目标，由于没有依赖，因此会直接执行命令，清除中间文件
+
+  ![image-20231105123246919](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105123246919.png)
+
+  
+
+  另一个变量版本的Makefile
+
+  ```makefile
+  OBJS = add.o sub.o mul.o div.o test.o
+  TARGET = test
+  
+  #这些变量不能单独使用，必须在命令中使用
+  #$@ 表示目标
+  #$^ 表示所有依赖
+  #$< 表示第一个依赖
+  
+  $(TARGET):$(OBJS)
+          gcc $^ -o $@
+  
+  add.o:add.c
+          gcc -c $^ -o $@
+  
+  sub.o:sub.c
+          gcc -c $^ -o $@
+  
+  mul.o:mul.c
+          gcc -c $^ -o $@
+  
+  div.o:div.c
+          gcc -c $^ -o $@
+  
+  test.o:test.c
+          gcc -c $^ -o $@
+  
+  clean:
+          rm -rf $(OBJS) $(TARGET)
+  ```
+
+  ![image-20231105141235489](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105141235489.png)
+
+- 模式规则
+
+  除了使用用户自定义变量，Makefile中也提供了一些变量（变量名大写）供用户直接使用，可以对其进行赋值
+
+  ![image-20231105123046106](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105123046106.png)
+
+  > %.o:%.c
+  >
+  > $(CC) -c $(CFLAGS) $(CPPFALGS) $< -o $@
+
+  ```makefile
+  OBJS = add.o sub.o mul.o div.o test.o
+  TARGET = test
+  
+  #这些变量不能单独使用，必须在命令中使用
+  #$@ 表示目标
+  #$^ 表示所有依赖
+  #$< 表示第一个依赖
+  
+  $(TARGET):$(OBJS)
+          gcc $^ -o $@
+  
+  #模式匹配 所有的.o都依赖对应的.c
+  #将所有的.c 生成对应的.o
+  %.o:%.c
+          gcc -c $^ -o $@
+  
+  clean:
+          rm -rf $(OBJS) $(TARGET)
+  ```
+
+  ![image-20231105141920606](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105141920606.png)
+
+
+
+**Makefile中的函数**
+
+![image-20231105142245656](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105142245656.png)
+
+
+
+```makefile
+#获取当前目录下所有的.c文件
+SRC=$(wildcard ./*.c)
+
+#将SRC中所有的.c替换成.o，这样就可以自动获取.o，不需要一个一个输入
+OBJS=$(patsubst %.c, %.o, $(SRC))
+
+TARGET = test
+
+#这些变量不能单独使用，必须在命令中使用
+#$@ 表示目标
+#$^ 表示所有依赖
+#$< 表示第一个依赖
+
+$(TARGET):$(OBJS)
+        gcc $^ -o $@
+
+#模式匹配 所有的.o都依赖对应的.c
+#将所有的.c 生成对应的.o
+%.o:%.c
+        gcc -c $^ -o $@
+
+clean:
+        rm -rf $(OBJS) $(TARGET)
+```
+
+![image-20231105142837869](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105142837869.png)
+
+
+
+但是clean仍有问题，如果同级目录下有一个clean文件，就会出问题，不会去执行Makefile中的clean命令了
+
+![image-20231105143140842](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105143140842.png)
+
+
+
+原因：
+
+![image-20231105143333025](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105143333025.png)
+
+
+
+最终版Makefile
+
+```makefile
+#获取当前目录下所有的.c文件
+SRC=$(wildcard ./*.c)
+
+#将SRC中所有的.c替换成.o，这样就可以自动获取.o，不需要一个一个输入
+OBJS=$(patsubst %.c, %.o, $(SRC))
+
+TARGET = test
+
+#这些变量不能单独使用，必须在命令中使用
+#$@ 表示目标
+#$^ 表示所有依赖
+#$< 表示第一个依赖
+
+$(TARGET):$(OBJS)
+        gcc $^ -o $@
+
+#模式匹配 所有的.o都依赖对应的.c
+#将所有的.c 生成对应的.o
+%.o:%.c
+        @gcc -c $^ -o $@
+
+#声明clean为伪目标 伪目标不去判断目标文件是否存在或已经更新
+#无条件执行命令
+.PHONY:clean
+clean:
+        -rm -rf $(OBJS) $(TARGET)
+```
+
+![image-20231105143725332](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105143725332.png)
+
+
+
+**Makefile工作原理**
+
+1. ![image-20231105144230468](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105144230468.png)
+2. ![image-20231105144344994](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231105144344994.png)
+
+> 总结：
+>
+> - 分析各个目标和依赖之间的关系
+> - 根据依赖关系自底向上执行命令
+> - 根据修改时间比目标新，确定更新
+> - 如果目标不依赖任何条件，则执行对应命令，以示更新
