@@ -1035,3 +1035,113 @@ clean:
 > - 根据依赖关系自底向上执行命令
 > - 根据修改时间比目标新，确定更新
 > - 如果目标不依赖任何条件，则执行对应命令，以示更新
+
+
+
+## 8. 系统调用
+
+**什么是系统调用？**
+
+![image-20231106110233740](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231106110233740.png)
+
+![image-20231106110523264](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231106110523264.png)
+
+
+
+**系统调用的实现**
+
+![image-20231106110621495](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231106110621495.png)
+
+
+
+**系统调用和库函数的区别**
+
+![image-20231106110745665](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231106110745665.png)
+
+
+
+**C库中IO函数工作流程**
+
+![image-20231107163946955](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107163946955.png)
+
+![image-20231107164234394](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107164234394.png)
+
+
+
+**错误处理函数**
+
+​	errno是记录系统的最后一次错误代码。代码是一个int型的值，在errno.h定义。查看错误代码errno是调试程序的一个重要方法
+
+​	当Linux C api函数发生异常时，一般会将errno全局变量赋一个整数值，不同的值表示你不同的涵义，可以通过查看该值推测出错的原因
+
+
+
+strerror(errno)：传入错误码，返回错误信息字符串
+
+perror("fopen err")：打印错误原因的字符串
+
+
+
+测试程序：1errno.c
+
+```c
+#include <stdio.h>
+#include<errno.h>
+#include<string.h>
+
+// errno是一个全局变量，在errno.h头文件中有定义
+// errno是保存系统最近出错错误码
+int main(int argc, char *argv[])
+{
+    // 打开文件（只读）
+    FILE *fp = fopen("txt","r");
+    if (NULL == fp)
+    {
+        printf("fopen failed....\n");
+        printf("errno: %d\n",errno);
+        // 根据errno的值，解析出错原因
+        printf("fopen: %s\n",strerror(errno));
+
+        // 根据errno值输出错误信息
+        // 提示字符串：出错原因
+        perror("fopen");
+
+        return 1;
+    }
+
+    return 0;
+}
+```
+
+> jomo@jomo-virtual-machine:~/linux_server/sysfn$ gcc 1errno.c 
+> jomo@jomo-virtual-machine:~/linux_server/sysfn$ ./a.out 
+> fopen failed....
+> errno: 2
+> fopen: No such file or directory
+> fopen: No such file or directory
+
+
+
+查看错误号：
+
+> /usr/include/asm-generic/errno-base.h
+>
+> /usr/include/asm-generic//errno.h
+
+
+
+**虚拟地址空间**
+
+![image-20231107171455415](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107171455415.png)
+
+![image-20231107172251836](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107172251836.png)
+
+
+
+**文件描述符**
+
+![image-20231107173214157](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107173214157.png)
+
+![image-20231107173521486](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107173521486.png)
+
+![image-20231107173643451](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107173643451.png)
