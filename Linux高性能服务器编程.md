@@ -1145,3 +1145,218 @@ int main(int argc, char *argv[])
 ![image-20231107173521486](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107173521486.png)
 
 ![image-20231107173643451](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231107173643451.png)
+
+
+
+**常用文件IO函数**
+
+- **open函数**
+
+  ```c
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <fcntl.h>
+  
+  int open(const char *pathname, int flags);
+  int open(const char *pathname, int flags, mode_t mode);
+  功能：
+      打开文件，如果文件不存在则可以选择创建
+  参数；
+      pathname: 文件的路径及文件名
+      flags: 打开文件的行为标志，必选项 O_RDONLY,O_WRONLY,O_RDWR
+      mode: 这个参数，只有文件不存在时有效，指新建文件时指定文件的权限
+  返回值：
+      成功：成功返回打开的文件描述符
+      失败：-1
+  ```
+
+  ![image-20231116134348541](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231116134348541.png)
+
+- **close函数**
+
+  ```c
+  #include <unistd.h>
+  int close(int fd);
+  功能：
+      关闭已打开的文件
+  参数；
+      fd: 文件描述符，open()的返回值
+  返回值：
+      成功：0
+      失败：-1，并设置errno
+  ```
+  
+  需要说明的是，当一个进程终止时，内核对该进程所有尚未关闭的文件描述符调用close关闭，所以即使用户程序不调用close，在终止时内核也会自动关闭它打开的所有文件
+  
+  但是对于一个常年运行的程序（比如网络服务器），打开的文件描述符一定要记得关闭，否则随着打开的文件越来越多，会占用大量文件描述符和系统资源
+  
+  ```c
+  #include <stdio.h>
+  #include<string.h>
+  #include<sys/types.h>
+  #include<sys/stat.h>
+  #include<sys/fcntl.h>
+  #include <unistd.h>
+  
+  // 打开和关闭文件
+  int main(int argc, char *argv[])
+  {
+      int fd = -1;
+      // 以只读的方式打开一个文件，如果文件不存在就报错
+      fd = open("txt",O_RDONLY);
+      if (-1 == fd)
+      {
+          perror("open");
+          return 1;
+      }
+  
+      printf("fd = %d\n",fd);
+  
+      // 关闭文件
+      close(fd);
+      return 0;
+  }
+  ```
+  
+- **write函数**
+
+  ```c
+  #include <unistd.h>
+  ssize_t write(int fd, const void *buf, size_t count);
+  功能：
+      把指定数目的数据写到文件（fd）
+  参数：
+  	fd: 文件描述符
+      buf: 数据首地址
+      count: 写入数据的长度
+  返回值：
+  	成功：实际写入的字节个数
+      失败：-1
+  ```
+
+  ```c
+  #include <stdio.h>
+  #include<string.h>
+  #include<stdlib.h>
+  #include<sys/types.h>
+  #include<sys/stat.h>
+  #include<sys/fcntl.h>
+  #include <unistd.h>
+  
+  // 写文件
+  int main(int argc, char *argv[])
+  {
+      int fd=-1;
+      int ret=1;
+  
+      char*str = "hello itcast";
+  
+      // 1.以只写的方式打开一个文件
+      fd=open("txt",O_WRONLY | O_CREAT,0644);
+      if(-1 == fd)
+      {
+          perror("open");
+          return 1;
+      }
+  
+      printf("fd=%d\n",fd);
+  
+      // 2.写文件
+      ret = write(fd,str,strlen(str));
+      if (-1==ret){
+          perror("write");
+          return 1;
+      }
+      printf("write len: %d\n",ret);
+  
+      // 3.关闭文件
+      close(fd);
+  
+      return 0;
+  }
+  ```
+
+- **read函数**
+
+  ```c
+  #include <unistd.h>
+  ssize_t read(int fd, void *buf, size_t count);
+  功能：
+      把指定数目的数据读到内存（缓冲区）
+  参数：
+  	fd: 文件描述符
+      buf: 内存首地址
+  	count: 读取的字节个数
+  返回值：
+      成功：实际读取到的字节个数
+  	失败：-1
+  ```
+
+  ```c
+  #include <stdio.h>
+  #include<string.h>
+  #include<stdlib.h>
+  #include<sys/types.h>
+  #include<sys/stat.h>
+  #include<sys/fcntl.h>
+  #include <unistd.h>
+  
+  #define SIZE 128
+  
+  // 读文件
+  int main(int argc, char *argv[])
+  {
+      int fd=-1;
+      int ret=1;
+  
+      char buf[SIZE];
+  
+      // 1.以只读的方式打开一个文件
+      fd=open("txt",O_RDONLY);
+      if(-1 == fd)
+      {
+          perror("open");
+          return 1;
+      }
+  
+      printf("fd=%d\n",fd);
+  
+      // 2.读文件
+      memset(buf,0,SIZE);
+      ret = read(fd,buf,SIZE);
+      if (-1==ret){
+          perror("read");
+          return 1;
+      }
+      printf("read len: %d %s\n",ret,buf);
+  
+      // 3.关闭文件
+      close(fd);
+  
+      return 0;
+  }
+  ```
+
+  **阻塞与非阻塞**
+
+  ![image-20231116143111609](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231116143111609.png)
+
+  阻塞程序示例（getchar.c)
+
+  ```c
+  #include <stdio.h>
+  
+  int main(int argc, char *argv[])
+  {
+      char ch = -1;
+  
+      // 从标准输入获取一个字符
+      ch = getchar();// 如果不输入换行符，则会一直阻塞在标准输入中
+  
+      putchar(ch);
+  
+      return 0;
+  }
+  ```
+
+  
