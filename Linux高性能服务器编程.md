@@ -1359,4 +1359,645 @@ int main(int argc, char *argv[])
   }
   ```
 
+
+
+
+## 9. 进程
+
+![image-20231122102057103](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122102057103.png)
+
+**进程号和相关函数**
+
+- **getpid**
+
+  ```c
+  #include <sys/types.h>
+  #include <unistd.h>
   
+  pid_t getpid(void);
+  功能：
+      获取本进程号PID
+  参数：
+      无
+  返回值：
+      本进程号
+  ```
+
+- **getppid**
+
+  ```c
+  #include <sys/types.h>
+  #include <unistd.h>
+  
+  pid_t getppid(void);
+  功能：
+      获取调用此函数的进程的父进程号PID
+  参数：
+      无
+  返回值：
+      父进程号
+  ```
+
+- **getpgid**
+
+  ```c
+  #include <sys/types.h>
+  #include <unistd.h>
+  
+  pid_t getpgid(void);
+  功能：
+      获取进程组号
+  参数：
+      pid：进程号
+  返回值：
+      参数为0时返回当前进程组号，否则返回参数指定的进程的进程组号
+  ```
+
+**进程的创建**
+
+- **fork**
+
+  ```c
+  #include <sys/types.h>
+  #include <unistd.h>
+  
+  pid_t fork(void);
+  功能：
+      用于从一个已存在的进程中创建一个新进程，新进程称为子进程，原进程称为父进程
+  参数：
+      无
+  返回值：
+      成功：子进程中返回0，父进程中返回子进程ID。pid_t，为整型
+      失败：返回-1
+      失败的两个主要原因是：
+      	1)当前的进程数已经达到了系统规定的上限，这时errno的值被设置为EAGAIN
+      	2)系统内存不足时，这时errno的值被设置为ENOMEM
+  ```
+
+  示例代码：
+
+  ```c
+  #include <stdio.h>
+  #include <sys/types.h>
+  #include <unistd.h>
+  
+  // 创建一个子进程
+  int main(int argc, char *argv[])
+  {
+      // 创建子进程
+      fork();
+  
+      printf("hello world\n");
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/process$ gcc fork.c 
+  > jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+  > hello world
+  > hello world
+  >
+  >
+  > 也可能出现以下情况：
+  >
+  > jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+  > hello world
+  > jomo@jomo-virtual-machine:~/linux_server/process$ hello world
+  > 这是由于父进程退出后，控制权重新交回给bash，而子进程还没打印完
+
+  ![image-20231122104013839](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122104013839.png)
+
+
+
+**父子进程关系**
+
+![image-20231122104421078](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122104421078.png)
+
+![image-20231122104442374](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122104442374.png)
+
+写时拷贝，读时共享
+
+
+
+**区分父子进程**
+
+![image-20231122104953717](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122104953717.png)
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+// 区分父子进程
+int main(int argc, char *argv[])
+{
+    pid_t pid = -1;
+    
+    // 创建一个子进程
+    // fork函数在子进程中返回0，在父进程中返回子进程的pid
+    pid = fork();
+
+    if(pid < 0){
+        // 没有创建成功
+        perror("fork");
+        return 0;
+    }
+    if(0 == pid){
+        // 子进程
+        while(1){
+            printf("I am son\n");
+            sleep(1);    
+        }
+    }else if (pid>0){
+        // 父进程
+        while(1){
+            printf("I am father\n");
+            sleep(1);
+        }
+    }
+
+    return 0;
+}
+```
+
+
+
+> jomo@jomo-virtual-machine:~/linux_server/process$ gcc fork.c 
+> jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+> I am father
+> I am son
+> I am father
+> I am son
+> I am father
+> I am son
+> I am father
+> I am son
+> I am son
+> I am father
+> I am son
+> I am father
+> I am son
+> I am father
+> I am father
+> I am son
+>
+> .......
+
+![image-20231122110143605](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122110143605.png)
+
+
+
+**父子进程地址空间**
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+// 父子进程地址空间
+int main(int argc, char *argv[])
+{
+    int var = 88;
+    pid_t pid = -1;
+    
+    // 创建一个子进程
+    pid = fork();
+    if(-1 == pid)
+    {
+        perror("fork");
+        return 1;
+    }
+
+    if (0==pid)
+    {
+        // 子进程
+        sleep(2);
+        printf("子进程睡醒之后 var = %d\n",var);// 88
+    }
+    else
+    {
+        // 父进程
+        printf("父进程之前 var = %d\n",var); //88
+        var++;
+        printf("父进程之后 var = %d\n",var);// 89
+    }
+
+    return 0;
+}
+```
+
+
+
+> jomo@jomo-virtual-machine:~/linux_server/process$ gcc fork.c 
+> jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+> 父进程之前 var = 88
+> 父进程之后 var = 89
+> jomo@jomo-virtual-machine:~/linux_server/process$ 子进程睡醒之后 var = 88
+
+
+
+
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+// 全局变量 数据段
+int num = 100;
+
+// 父子进程地址空间
+int main(int argc, char *argv[])
+{
+    int var = 88;
+    pid_t pid = -1;
+    int *p =NULL;
+    
+    // 在堆区分配内存空间
+    p = malloc(sizeof(int));
+    if(NULL == p)
+    {
+        printf("malloc failed...\n");
+        return 1;    
+    }
+    memset(p,0,sizeof(int));
+
+    *p = 200;
+
+    // 创建一个子进程
+    pid = fork();
+    if(-1 == pid)
+    {
+        perror("fork");
+        return 1;
+    }
+
+    if (0==pid)
+    {
+        // 子进程
+        sleep(2);
+        printf("子进程睡醒之后 *p = %d num = %d  var = %d\n",*p,num,var);
+    }
+    else
+    {
+        // 父进程
+        printf("父进程之前 *p = %d num = %d  var = %d\n",*p,num,var);
+        var++;
+        num++;
+        (*p)++;
+        printf("父进程之后 *p = %d num = %d  var = %d\n",*p,num,var);
+    }
+
+    return 0;
+}
+```
+
+
+
+> jomo@jomo-virtual-machine:~/linux_server/process$ gcc fork.c 
+> jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+> 父进程之前 *p = 200 num = 100  var = 88
+> 父进程之后 *p = 201 num = 101  var = 89
+> jomo@jomo-virtual-machine:~/linux_server/process$ 子进程睡醒之后 *p = 200 num = 100  var = 88
+
+
+
+查看内存泄漏：
+
+
+
+> jomo@jomo-virtual-machine:~/linux_server/process$ valgrind ./a.out 
+> ==13379== Memcheck, a memory error detector
+> ==13379== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+> ==13379== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+> ==13379== Command: ./a.out
+> ==13379== 
+> 父进程之前 *p = 200 num = 100  var = 88
+> 父进程之后 p = 201 num = 101  var = 89
+> **==13379==** 
+> ***==13379== HEAP SUMMARY:**
+> ***==13379==     in use at exit: 4 bytes in 1 blocks***
+> ***==13379==   total heap usage: 2 allocs, 1 frees, 1,028 bytes allocated***
+> ***==13379==*** 
+> ***==13379== LEAK SUMMARY:***
+> ***==13379==    definitely lost: 4 bytes in 1 blocks***
+> ***==13379==    indirectly lost: 0 bytes in 0 blocks***
+> ***==13379==      possibly lost: 0 bytes in 0 blocks***
+> ***==13379==    still reachable: 0 bytes in 0 blocks***
+> ***==13379==         suppressed: 0 bytes in 0 blocks***
+> ***==13379== Rerun with --leak-check=full to see details of leaked memory***
+> ***==13379==*** 
+> ==13379== For lists of detected and suppressed errors, rerun with: -s
+> ==13379== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+> jomo@jomo-virtual-machine:~/linux_server/process$ 子进程睡醒之后 *p = 200 num = 100  var = 88
+> ******==13380==*** 
+> ***==13380== HEAP SUMMARY:***
+> ***==13380==     in use at exit: 4 bytes in 1 blocks***
+> ***==13380==   total heap usage: 2 allocs, 1 frees, 1,028 bytes allocated***
+> ***==13380==*** 
+> ***==13380== LEAK SUMMARY:***
+> ***==13380==    definitely lost: 4 bytes in 1 blocks***
+> ***==13380==    indirectly lost: 0 bytes in 0 blocks***
+> ***==13380==      possibly lost: 0 bytes in 0 blocks***
+> ***==13380==    still reachable: 0 bytes in 0 blocks***
+> ***==13380==         suppressed: 0 bytes in 0 blocks***
+> ***==13380== Rerun with --leak-check=full to see details of leaked memory***
+> ==13380==*** 
+> ==13380== For lists of detected and suppressed errors, rerun with: -s
+> ==13380== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+原因：
+
+没有释放指针p，注意父子进程都要释放
+
+
+
+修改后：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+// 全局变量 数据段
+int num = 100;
+
+// 父子进程地址空间
+int main(int argc, char *argv[])
+{
+    int var = 88;
+    pid_t pid = -1;
+    int *p =NULL;
+    
+    // 在堆区分配内存空间
+    p = malloc(sizeof(int));
+    if(NULL == p)
+    {
+        printf("malloc failed...\n");
+        return 1;    
+    }
+    memset(p,0,sizeof(int));
+
+    *p = 200;
+
+    // 创建一个子进程
+    pid = fork();
+    if(-1 == pid)
+    {
+        perror("fork");
+        return 1;
+    }
+
+    if (0==pid)
+    {
+        // 子进程
+        sleep(2);
+        printf("子进程睡醒之后 *p = %d num = %d  var = %d\n",*p,num,var);
+        free(p);
+        p=NULL;
+    }
+    else
+    {
+        // 父进程
+        printf("父进程之前 *p = %d num = %d  var = %d\n",*p,num,var);
+        var++;
+        num++;
+        (*p)++;
+        printf("父进程之后 *p = %d num = %d  var = %d\n",*p,num,var);
+        free(p);
+        p=NULL;
+    }
+
+    return 0;
+}
+```
+
+> jomo@jomo-virtual-machine:~/linux_server/process$ valgrind ./a.out 
+>
+> ==3430== Memcheck, a memory error detector
+> ==3430== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+> ==3430== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+> ==3430== Command: ./a.out
+> ==3430== 
+> 父进程之前 *p = 200 num = 100  var = 88
+> 父进程之后 *p = 201 num = 101  var = 89
+> ******==3430==*** 
+> ***==3430== HEAP SUMMARY:***
+> ***==3430==     in use at exit: 0 bytes in 0 blocks***
+> ***==3430==   total heap usage: 2 allocs, 2 frees, 1,028 bytes allocated***
+> ***==3430==*** 
+> ***==3430== All heap blocks were freed -- no leaks are possible***
+> ==3430==*** 
+> ==3430== For lists of detected and suppressed errors, rerun with: -s
+> ==3430== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+> jomo@jomo-virtual-machine:~/linux_server/process$ 子进程睡醒之后 *p = 200 num = 100  var = 88
+> ******==3431==*** 
+> ***==3431== HEAP SUMMARY:***
+> ***==3431==     in use at exit: 0 bytes in 0 blocks***
+> ***==3431==   total heap usage: 2 allocs, 2 frees, 1,028 bytes allocated***
+> ***==3431==*** 
+> ***==3431== All heap blocks were freed -- no leaks are possible***
+> ==3431==*** 
+> ==3431== For lists of detected and suppressed errors, rerun with: -s
+> ==3431== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+
+
+**GDB调试多进程**
+
+![image-20231122221202636](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122221202636.png)
+
+
+
+**进程退出函数**
+
+相关函数：
+
+```c
+#include <stdlib.h>
+void exit(int status);
+
+#include <unistd.h>
+void _exit(int status);
+功能：
+    结束调用此函数的进程
+参数：
+    status：返回给父进程的参数（低8位有效），至于这个参数是多少根据需要来填写
+返回值：
+    无
+```
+
+![image-20231122221524235](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122221524235.png)
+
+```c
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+// 结束进程
+int main(int argc, char *argv[])
+{
+    printf("hello world");
+
+    // 等价于return 0
+    // exit(0); 正常输出hello world
+    // _exit(0); // 无法正常输出hello world，因为直接退出，不做任何清理工作
+    _Exit(0); // 等价于_exit(0)
+}
+```
+
+
+
+**等待子进程退出函数**
+
+![image-20231122222125838](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122222125838.png)
+
+- wait：
+
+  ```c
+  #include <sys/types.h>
+  #include <sys/wait.h>
+  
+  pid_t wait(int *wstatus);
+  功能：
+      等待任意一个子进程结束，如果任意一个子进程结束了，此函数会回收该子进程的资源
+  参数：
+  	status：进程退出时的状态信息
+  返回值：
+      成功：已经结束子进程的进程号
+      失败：-1
+  ```
+
+  ![image-20231122223558084](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122223558084.png)
+
+  ![image-20231122224713369](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122224713369.png)
+
+  ```c
+  #include <stdio.h>
+  #include <string.h>
+  #include <stdlib.h>
+  #include <sys/types.h>
+  #include <sys/wait.h>
+  #include <unistd.h>
+  
+  // 等待子进程退出
+  int main(int argc, char *argv[])
+  {
+      int status = 0;
+      int i = 0;
+      pid_t pid = -1;
+      int ret = -1;
+  
+      //创建子进程
+      pid = fork();
+      if (-1 == pid)
+      {
+          perror("fork");
+          return 1;
+      }
+  
+      //子进程
+      if (0 == pid){
+          for (i=0;i<10;i++){
+              printf("child process %d do %d\n",getpid(),i+1);
+              sleep(1);
+          }
+  
+          //子进程终止
+          exit(10);
+      }
+  
+      //父进程执行
+      printf("父进程等待子进程退出，回收其资源\n");
+      ret = wait(&status);
+      if(-1 == ret){
+          perror("wait");
+          return 1;
+      }
+  
+      printf("父进程回收了子进程资源...\n");
+  
+      //属于正常退出
+      if (WIFEXITED(status))
+      {
+          printf("子进程正常退出状态码：%d\n",WEXITSTATUS(status));
+      }
+      else if(WIFSIGNALED(status))
+      {
+          // jomo@jomo-virtual-machine:~$ kill -9 3638
+          printf("子进程被信号%d杀死了...\n",WTERMSIG(status));
+      }
+      else if(WSTOPSIG(status))
+      {	
+          // 向指定进程发送暂停信号
+          // jomo@jomo-virtual-machine:~$ kill -19 3640
+          // 唤醒指定进程
+          // jomo@jomo-virtual-machine:~$ kill -19 3640
+          printf("子进程被信号%d暂停了...\n",WSTOPSIG(status));
+      }
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/process$ gcc wait.c 
+  > jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+  > 父进程等待子进程退出，回收其资源
+  > child process 3588 do 1
+  > child process 3588 do 2
+  > child process 3588 do 3
+  > child process 3588 do 4
+  > child process 3588 do 5
+  > child process 3588 do 6
+  > child process 3588 do 7
+  > child process 3588 do 8
+  > child process 3588 do 9
+  > child process 3588 do 10
+  > 父进程回收了子进程资源...
+  > 子进程正常退出状态码：10
+
+  
+
+  > jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+  >
+  > 在另一终端输入：jomo@jomo-virtual-machine:~$ kill -9 3638
+  >
+  > 父进程等待子进程退出，回收其资源
+  > child process 3638 do 1
+  > child process 3638 do 2
+  > child process 3638 do 3
+  > child process 3638 do 4
+  > child process 3638 do 5
+  > 父进程回收了子进程资源...
+  > 子进程被信号9杀死了...
+
+- waitpid：
+
+  ![image-20231122230017982](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122230017982.png)
+
+  ```c
+  ret = waitpid(-1,&status,0);//等价于wait：阻塞等待任意子进程退出
+  ret = waitpid(-1,&status,WNOHANG);//非阻塞等待任意子进程退出
+  ```
+
+
+
+**孤儿进程**
+
+![image-20231122230602136](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122230602136.png)
+
+
+
+**僵尸进程**
+
+![](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122230719126.png)
+
+如果子进程先于父进程退出，那么在父进程退出之前，子进程会一直处于僵尸状态
+
+进程退出后，内核会为其释放资源，例如占用的内存与文件描述符等，但仍会为其保留一定的信息，主要是PCB的信息（包括进程号、退出状态、运行时间等），而调用wait或waitpid函数（由别的进程调用）可以彻底清除该进程的遗留信息，可以把进程号让出来，避免无进程号可用
