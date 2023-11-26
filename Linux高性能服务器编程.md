@@ -2008,3 +2008,84 @@ int main(int argc, char *argv[])
 
 - 父进程未退出：僵尸进程可能会一直存在，占用系统资源。
 - 父进程退出后：在这种情况下，虽然父进程没有主动调用`wait`或`waitpid`，但当父进程退出时，操作系统会自动将所有属于父进程的子进程交由init进程（通常是PID为1的进程）来收养。init进程会定期调用`wait`或`waitpid`来获取已经退出的子进程的退出状态，并释放相关的资源。
+
+
+
+**进程替换**
+
+![image-20231126113236730](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126113236730.png)
+
+![image-20231126113722324](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126113722324.png)
+
+![image-20231126113811421](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126113811421.png)
+
+- **execlp**
+
+  ```c
+  int execlp(const char *file, const char *arg, .../* (char  *) NULL */);
+  ```
+
+  
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <unistd.h>
+  
+  int main(void)
+  {
+      printf("Hello itcast\n");
+  
+      // arg0 arg1 arg2 ... argn
+      // arg0一般是可执行文件名 argn必须是NULL
+      // 等价于执行ls -l /home
+      execlp("ls", "ls", "-l", "/home", NULL);
+  
+      printf("Hello world\n");
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/process$ gcc execlp.c 
+  > jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+  > Hello itcast
+  > 总计 4
+  > drwxr-x--- 32 jomo jomo 4096 11月 26 11:40 jomo
+
+  最后一个hello的打印语句并没有被执行，原因如下：
+
+  ![image-20231126115058501](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126115058501.png)
+
+- **execl**
+
+  ```c
+  int execl(const char *pathname, const char *arg, .../* (char  *) NULL */);
+  ```
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <unistd.h>
+  
+  int main(void)
+  {
+      printf("Hello itcast\n");
+  
+      // arg0：可执行文件的绝对路径或者相对路径
+      // arg1：可执行文件的名字
+      // arg2~arg(n-1)：可执行文件的参数
+      // argn：必须是NULL
+      execl("/bin/ls", "ls", "-l", "/home", NULL);
+  
+      printf("Hello world\n");
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/process$ gcc execl.c
+  > jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+  > Hello itcast
+  > 总计 4
+  > drwxr-x--- 32 jomo jomo 4096 11月 26 11:58 jomo
