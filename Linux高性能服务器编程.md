@@ -2089,3 +2089,173 @@ int main(int argc, char *argv[])
   > Hello itcast
   > 总计 4
   > drwxr-x--- 32 jomo jomo 4096 11月 26 11:58 jomo
+
+
+
+**进程间通信**
+
+![image-20231126121239015](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126121239015.png)
+
+![image-20231126121327042](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126121327042.png)
+
+
+
+**无名管道**
+
+![image-20231126142541551](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126142541551.png)
+
+![image-20231126142803457](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126142803457.png)
+
+
+
+**pipe**
+
+```c
+#include <unistd.h>
+
+int pipe(int pipefd[2]);
+功能：创建无名管道
+
+参数：
+    pipefd：为int型数组的首地址，其存放了管道的文件描述符pipefd[0]、pipefd[1]
+	
+    当一个管道建立时，它会创建两个文件描述符fd[0]和fd[1]。其中fd[0]固定用于读管道，而fd[1]固定用于写管道。一般文件I/O的函数都可以用来操作管道(lseek())除外
+
+返回值：
+    成功：0
+    失败：-1
+```
+
+![image-20231126174056155](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231126174056155.png)
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#define SIZE 64
+
+// 用于创建无名管道，父子进程使用无名管道进行通信
+// 父进程写管道 子进程读管道
+int main(void)
+{
+    int fd[2];
+    int ret = -1;
+    char buf[SIZE];
+    pid_t pid = -1;
+
+    // 1.创建一个无名管道
+    ret = pipe(fd);
+    if (-1 == ret)
+    {
+        perror("pipe");
+        return 1;
+    }
+
+    // 一定要在创建子进程前创建无名管道，这样父子进程共享的才是同一个管道
+    // 2.创建子进程
+    pid = fork();
+    if (-1 == pid)
+    {
+        perror("fork");
+        return 1;
+    }
+
+    // 子进程 读
+    if (0 == pid)
+    {
+        // 关闭写端
+        close(fd[1]);
+
+        memset(buf, 0, SIZE);
+        ret = read(fd[0], buf, SIZE);
+        if (ret < 0)
+        {
+            perror("read");
+            exit(-1);
+        }
+
+        printf("chilid process read buf: %s\n", buf);
+
+        // 关闭读端
+        close(fd[0]);
+        // 进程退出
+        exit(0);
+    }
+    // 父进程 写
+    else
+    {
+        // 关闭读端
+        close(fd[0]);
+
+        ret = write(fd[1], "ABCDEFGHIJ", 10);
+        if (ret < 0)
+        {
+            perror("write");
+            return 1;
+        }
+
+        printf("parent process write len :%d\n", 10);
+
+        // 关闭写端
+        close(fd[1]);
+    }
+
+    return 0;
+}
+```
+
+> jomo@jomo-virtual-machine:~/linux_server/process$ gcc pipe.c 
+> jomo@jomo-virtual-machine:~/linux_server/process$ ./a.out 
+> parent process write len :10
+> chilid process read buf: ABCDEFGHIJ
+
+由于无名管道是阻塞型I/O，因此子进程执行read时，如果父进程还未写入管道（管道还没有数据），则子进程会一直阻塞直至父进程写完（管道有数据了）
+
+
+
+管道的读写特性：
+
+1. 写端没有关闭
+   - 管道中没有数据：读管道进程会阻塞
+   - 管道中有数据：读管道进程会将数据读出，下一次读没有数据就会阻塞
+2. 所有写端关闭：读管道进程读取全部内容，最后返回0
+3. 读端没有关闭：如果管道被写满了，写管道进程会被阻塞
+4. 所有读端被关闭：写管道进程会收到一个信号SIGPIPE，然后异常终止
+
+
+
+**查看管道缓冲区**
+
+**fpathconf**
+
+```c
+#include <unistd.h>
+
+long fpathconf(int fd, int name);
+功能：该函数可以通过name参数查看不同的属性值
+参数：
+    fd：文件描述符
+    name：
+		_PC_PIPE_BUF，查看管道缓冲区大小
+    	_PC_NAME_MAX，文件名名字字节数的上限
+返回值：
+    成功：根据namne返回的值的意义也不同
+    失败：-1
+```
+
+
+
+**设置为非阻塞的方法**
+
+```c
+// 获取原来的flag
+int flag = fcntl(fd[0],F_GETFL);
+// 设置新的flag
+flag |= O_NONBLOCK
+fcntl(fd[0],F_SETFL,flag);
+```
+
+结论：如果写端没有关闭，读端设置为非阻塞，如果没有数据，直接返回-1
