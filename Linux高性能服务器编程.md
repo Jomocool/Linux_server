@@ -2259,3 +2259,439 @@ fcntl(fd[0],F_SETFL,flag);
 ```
 
 结论：如果写端没有关闭，读端设置为非阻塞，如果没有数据，直接返回-1
+
+
+
+**有名管道**
+
+![image-20231129114932531](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129114932531.png)
+
+- 通过命令创建命名管道
+
+  > jomo@jomo-virtual-machine:~/linux_server/process$ mkfifo fifo
+  > jomo@jomo-virtual-machine:~/linux_server/process$ ls -l fifo
+  > prw-rw-r-- 1 jomo jomo 0 11月 29 11:51 fifo
+
+- 通过函数创建命名管道
+
+  ```c
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  
+  int mkfifo(const char* pathname,mode_t mode);
+  功能：
+      命名管道的创建
+  参数：
+      pathname：普通的路径名，也就是创建后FIFO的名字
+      mode：文件权限，与打开普通文件的open函数中的mode参数相同。（0666）
+  返回值：
+      成功：0 状态码
+      失败：如果文件已经存在，则会出错且返回-1
+  ```
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  
+  // 通过mkfifo函数创建一个管道文件
+  int main(void)
+  {
+      int ret = -1;
+  
+      // 可以用access函数判断文件是否已经存在
+      // 创建一个命名管道，管道的名字：fifo
+      ret = mkfifo("./fifo", 0644);
+      if (-1 == ret)
+      {
+          perror("mkfifo");
+          return 1;
+      }
+  
+      printf("创建一个命名管道ok...\n");
+  
+      return 0;
+  }
+  ```
+
+- 命名管道读写操作
+
+  ![image-20231129145330168](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129145330168.png)
+
+  write.c
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <unistd.h>
+  #include <fcntl.h>
+  
+  #define SIZE 128
+  
+  // 写命名管道
+  int main(void)
+  {
+      int fd = -1;
+      int i = 0;
+      int ret = -1;
+      char buf[128];
+  
+      // 1.以只写的方式打开一个管道文件
+      fd = open("fifo", O_WRONLY);
+      if (-1 == fd)
+      {
+          perror("open");
+          return 1;
+      }
+      printf("以只写的方式打开一个命名管道...OK\n");
+  
+      // 2.写管道
+      while (1)
+      {
+          memset(buf, 0, SIZE);
+          sprintf(buf, "Hello world %d", i++);
+          ret = write(fd, buf, strlen(buf));
+          if (ret <= 0)
+          {
+              perror("write");
+              break;
+          }
+          printf("write fifo %d\n", ret);
+          sleep(1);
+      }
+  
+      // 3.关闭文件
+      close(fd);
+  
+      return 0;
+  }
+  ```
+
+  read.c
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <unistd.h>
+  #include <fcntl.h>
+  
+  #define SIZE 128
+  
+  // 读管道
+  int main(void)
+  {
+      int fd = -1;
+      char buf[SIZE];
+      int ret = -1;
+  
+      // 1.以只读的方式打开一个管道文件
+      fd = open("fifo", O_RDONLY);
+      if (-1 == fd)
+      {
+          perror("open");
+          return 1;
+      }
+      printf("以只读的方式打开一个管道...OK\n");
+  
+      // 2.循环读管道
+      while (1)
+      {
+          memset(buf, 0, SIZE);
+          ret = read(fd, buf, SIZE); // 不需要sleep，因为如果没有数据可读就会阻塞
+  
+          // 如果写端是关闭的，则ret = 0
+          if (ret <= 0)
+          {
+              perror("read");
+              break;
+          }
+          printf("buf: %s\n", buf);
+      }
+  
+      // 3.关闭文件
+      close(fd);
+  
+      return 0;
+  }
+  ```
+
+  
+
+  在write.c执行前，read.c会一直阻塞：
+
+  ![image-20231129154128914](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129154128914.png)
+
+  ![image-20231129154159038](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129154159038.png)
+
+  ![image-20231129154219562](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129154219562.png)
+
+- 命名管道注意事项
+
+  1. 一个以只读的方式打开一个管道的进程会阻塞直至另一个进程以只写的`打开`该管道
+  2. 一个以只写的方式打开一个管道的进程会阻塞直至另一个进程以只读的方式`打开`该管道
+
+  ![image-20231129160010565](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129160010565.png)
+
+
+
+**使用命名管道写一个简易的聊天程序**
+
+talkA.c
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#define SIZE 128
+
+// 先读后写
+int main(void)
+{
+    int fdr = -1;
+    int fdw = -1;
+    char buf[SIZE];
+    int ret = -1;
+    // 以只读的方式打开fifo1
+    fdr = open("fifo1", O_RDONLY);
+    if (-1 == fdr)
+    {
+        perror("open");
+        return 1;
+    }
+    printf("以只读的方式打开fifo1...OK\n");
+
+    // 以只写的方式打开fifo2
+    fdw = open("fifo2", O_WRONLY);
+    if (-1 == fdw)
+    {
+        perror("open");
+        return 1;
+    }
+    printf("以只写的方式打开fifo2...OK\n");
+
+    // 循环读写
+    while (1)
+    {
+        // 读fifo1
+        memset(buf, 0, SIZE);
+        ret = read(fdr, buf, SIZE);
+        if (ret <= 0)
+        {
+            perror("read");
+            break;
+        }
+        printf("Received from B: %s\n", buf);
+
+        // 写fifo2
+        memset(buf, 0, SIZE);
+        fgets(buf, SIZE, stdin);
+        // 去掉最后一个换行符
+        if ('\n' == buf[strlen(buf) - 1])
+        {
+            buf[strlen(buf) - 1] = '\0';
+        }
+        ret = write(fdw, buf, strlen(buf));
+        if (ret <= 0)
+        {
+            perror("write");
+            break;
+        }
+
+        printf("Send to B ret: %d\n", ret);
+    }
+
+    // 关闭文件描述符
+    close(fdr);
+    close(fdw);
+
+    return 0;
+}
+```
+
+talkB.c
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#define SIZE 128
+
+// 先写后读
+int main(void)
+{
+    int fdr = -1;
+    int fdw = -1;
+    char buf[SIZE];
+    int ret = -1;
+    // 以只写的方式打开fifo1
+    fdw = open("fifo1", O_WRONLY);
+    if (-1 == fdw)
+    {
+        perror("open");
+        return 1;
+    }
+
+    printf("以只写的方式打开fifo1...OK\n");
+
+    // 以只读的方式打开fifo2
+    fdr = open("fifo2", O_RDONLY);
+    if (-1 == fdr)
+    {
+        perror("open");
+        return 1;
+    }
+    printf("以只读的方式打开fifo2...OK\n");
+
+    // 循环读写
+    while (1)
+    {
+        // 写fifo1
+        memset(buf, 0, SIZE);
+        fgets(buf, SIZE, stdin);
+        // 去掉最后一个换行符
+        if ('\n' == buf[strlen(buf) - 1])
+        {
+            buf[strlen(buf) - 1] = '\0';
+        }
+        ret = write(fdw, buf, strlen(buf));
+        if (ret <= 0)
+        {
+            perror("write");
+            break;
+        }
+
+        printf("Send to A ret: %d\n", ret);
+
+        // 读fifo2
+        memset(buf, 0, SIZE);
+        ret = read(fdr, buf, SIZE);
+        if (ret <= 0)
+        {
+            perror("read");
+            break;
+        }
+        printf("Received from A: %s\n", buf);
+    }
+
+    // 关闭文件描述符
+    close(fdr);
+    close(fdw);
+
+    return 0;
+}
+```
+
+![image-20231129165225965](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129165225965.png)
+
+
+
+![image-20231129165630862](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129165630862.png)
+
+
+
+![image-20231129170431979](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129170431979.png)
+
+
+
+
+
+**共享存储映射**
+
+![image-20231129174313731](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129174313731.png)
+
+- **存储映射函数**
+
+  - mmap函数
+
+    ![image-20231129174651049](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129174651049.png)
+
+    ![image-20231129174949419](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129174949419.png)
+
+  - munmap函数
+
+    ![image-20231129175020981](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129175020981.png)
+
+    ```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include <sys/mman.h>
+    
+    // 存储映射
+    int main(void)
+    {
+        int fd = -1;
+        int ret = -1;
+        void *addr = NULL;
+    
+        // 1. 以读写的方式打开一个文件
+        fd = open("txt", O_RDWR);
+        if (-1 == fd)
+        {
+            perror("open");
+            return 1;
+        }
+    
+        // 2. 将文件映射到内存
+        addr = mmap(NULL, 1024, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (addr == MAP_FAILED)
+        {
+            perror("mmap");
+            return 1;
+        }
+    
+        printf("文件存储映射OK...\n");
+    
+        // 3. 关闭文件
+        close(fd);
+    
+        // 4. 写文件（不需要再通过write了，直接操作内存地址）
+        memcpy(addr, "1234567890", 10);
+    
+        // 5. 断开存储映射
+        munmap(addr, 1024);
+    
+        return 0;
+    }
+    ```
+
+    ![image-20231129180324624](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129180324624.png)
+
+    ![image-20231129180353395](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129180353395.png)
+
+  - **借助共享映射区实现进程间的通信**
+
+    - 有血缘的进程之间：借助共享映射区（即映射之后的内存地址指针）
+    - 没有血缘的进程之间：借助文件
+
+  - **匿名映射实现父子进程间通信**
+
+    不需要依赖任何文件
+
+    ![image-20231129182236021](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129182236021.png)
+
+  
+
