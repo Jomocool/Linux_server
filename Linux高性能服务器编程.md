@@ -2693,5 +2693,186 @@ int main(void)
 
     ![image-20231129182236021](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231129182236021.png)
 
-  
 
+
+
+## 10. 信号
+
+**信号的概念**
+
+![image-20231130162330108](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130162330108.png)
+
+
+
+**信号的特点**
+
+- 简单
+- 不能携带大量信息
+- 满足某个特定的条件才发送
+
+
+
+信号可以直接进行用户空间进程和内核空间进程的交互，内核进程可以利用它来通知用户空间进程发生了哪些系统事件。
+
+一个完整的信号周期包括三个部分：信号的产生，信号在进程中的注册、信号在进程中的注销，执行信号处理函数
+
+![image-20231130163823539](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130163823539.png)
+
+注意：这里的信号的产生，注册，注销是信号的内部机制，而不是信号的函数实现
+
+
+
+**信号的编号**
+
+![image-20231130175827136](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130175827136.png)
+
+不存在编号为0的信号，其中1-31号信号称之为常规信号（也叫普通信号或标准信号），34-64称之为实时信号，驱动编程与硬件相关。名字上区别不大，而前32个名字各不相同
+
+
+
+**信号四要素**
+
+每个信号必备的4要素
+
+1. 编号
+2. 名称
+3. 事件
+4. 默认处理动作
+
+
+
+Action为默认动作：
+
+- Term：终止进程
+- Ign：忽略信号（默认即使对该种信息忽略操作）
+- Core：终止进程，生成Core文件（查验死亡原因，用于gdb调试）
+- Stop：停止（暂停）进程
+- Cont：继续运行进程
+
+![image-20231130183023393](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130183023393.png)
+
+
+
+**信号的状态**
+
+1. **产生**
+
+   ![image-20231130183157232](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130183157232.png)
+
+2. **未决状态：没有被处理**
+
+3. **递达状态：信号被处理了**
+
+
+
+**阻塞信号集和未决信号集**
+
+![image-20231130193035848](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130193035848.png)
+
+阻塞信号：不一定产生了，无论产不产生，都不处理
+
+味觉信号：一定产生了，但还未被处理
+
+
+
+**信号产生函数**
+
+- kill函数
+
+  ![image-20231130194126302](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130194126302.png)
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <sys/types.h>
+  #include <signal.h>
+  #include <unistd.h>
+  
+  // 父进程杀死子进程
+  int main(void)
+  {
+      pid_t pid = -1;
+  
+      // 创建一个子进程
+      pid = fork();
+      if (-1 == pid)
+      {
+          perror("fork");
+          return 1;
+      }
+  
+      // 子进程
+      if (0 == pid)
+      {
+          while (1)
+          {
+              printf("child process do work...\n");
+              sleep(1);
+          }
+  
+          // 进程退出
+          exit(0);
+      }
+      // 父进程
+      else
+      {
+          sleep(3);
+          printf("子进程该退出了...\n");
+          kill(pid, SIGKILL);// 也可以杀死自己，kill(getpid(),SIGKILL);
+          printf("父进程完成任务，该结束了...\n");
+      }
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/signal$ gcc kill.c 
+  > jomo@jomo-virtual-machine:~/linux_server/signal$ ./a.out 
+  > child process do work...
+  > child process do work...
+  > child process do work...
+  > 子进程该退出了...
+  > 父进程完成任务，该结束了...
+
+- raise函数
+
+  ![image-20231130195208725](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130195208725.png)
+
+  > jomo@jomo-virtual-machine:~/linux_server/signal$ gcc raise.c 
+  > jomo@jomo-virtual-machine:~/linux_server/signal$ ./a.out 
+  > do working 1
+  > do working 2
+  > do working 3
+  > do working 4
+  > 自己给自己发送信号...
+  > 已终止
+
+- abort函数
+
+  ![image-20231130225622889](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130225622889.png)
+
+- alarm函数（闹钟）
+
+  ![image-20231130225843881](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130225843881.png)
+
+  进程的定时器超时后，进程默认终止
+
+  新设置的闹钟的alarm函数返回值是上一个闹钟剩余的时间，且新闹钟会覆盖旧闹钟，如下：
+
+  ```c
+  int ret = 0;
+  ret = alarm(5);// ret = 0
+  sleep(2);
+  ret = alarm(4);// ret = 3
+  // 在上一行设置完新定时器后，4秒后进程终止
+  while(1);
+  ```
+
+- setitimer函数（定时器）
+
+  ![image-20231130230819802](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130230819802.png)
+
+  ![image-20231130231422258](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130231422258.png)
+
+  虽然设置了周期，但在第一次定时器超时后，进程收到内核发出的信号`SIGALRM`，所以还是默认终止了
