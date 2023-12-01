@@ -2876,3 +2876,349 @@ Action为默认动作：
   ![image-20231130231422258](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231130231422258.png)
 
   虽然设置了周期，但在第一次定时器超时后，进程收到内核发出的信号`SIGALRM`，所以还是默认终止了
+
+
+
+**信号集**
+
+- 概述
+
+  在PCB中有两个非常重要的信号集。一个称之为“阻塞信号集”，另一个称为“阻塞信号集”
+
+  这两个信号集都是内核使用`位图机制`来实现的。但操作系统不允许我们直接对其进行位操作。而需自定义另外一个集合，借助信号集操作函数来对PCB中的这两个信号集进行修改
+
+  ![image-20231201135325634](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201135325634.png)
+
+  阻塞信号集可以读写
+
+  未决信号集只能读不能写
+
+- 自定义信号集函数
+
+  ![image-20231201140203370](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201140203370.png)
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <signal.h>
+  #include <bits/types/sigset_t.h>
+  
+  // 显示信号集
+  void show_set(sigset_t *s)
+  {
+      int i = 0;
+      for (i = 1; i < 32; i++)
+      {
+          if (sigismember(s, i))
+          {
+              printf("1");
+          }
+          else
+          {
+              printf("0");
+          }
+      }
+      putchar('\n');
+  }
+  
+  // 信号集处理函数
+  int main(void)
+  {
+      // 信号集集合
+      sigset_t set;
+  
+      // 清空集合
+      sigemptyset(&set);
+      show_set(&set);
+  
+      // 将所有的信号加入到set集合中
+      sigfillset(&set);
+      show_set(&set);
+  
+      // 将信号2和3从信号集中移除
+      sigdelset(&set, SIGINT);
+      sigdelset(&set, SIGQUIT);
+      show_set(&set);
+  
+      // 将信号2添加到集合中
+      sigaddset(&set, SIGINT);
+      show_set(&set);
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/signal$ gcc sigset.c 
+  > jomo@jomo-virtual-machine:~/linux_server/signal$ ./a.out 
+  > 0000000000000000000000000000000
+  > 1111111111111111111111111111111
+  > 1001111111111111111111111111111
+  > 1101111111111111111111111111111
+
+- sigprocmask函数
+
+  ![image-20231201151013903](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201151013903.png)
+
+  ![image-20231201151121256](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201151121256.png)
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  #include <signal.h>
+  #include <bits/types/sigset_t.h>
+  #include <bits/sigaction.h>
+  
+  // 信号处理函数1
+  void fun1(int signum)
+  {
+      printf("捕捉到信号：%d\n", signum);
+  }
+  
+  // 信号处理函数2
+  void fun2(int signum)
+  {
+      printf("捕捉到信号：%d\n", signum);
+  }
+  
+  // 信号注册函数
+  int main(void)
+  {
+      int ret = -1;
+  
+      // 信号集
+      sigset_t set;
+      sigset_t oldset;
+  
+      // 信号注册
+      // Ctrl + 'c'
+      signal(SIGINT, fun1); // （异步）相当于只要来了SIGINT信号，就会执行fun1函数（信号处理函数）
+  
+      // Ctrl + '\'
+      signal(SIGQUIT, fun2);
+  
+      printf("按下任意键 阻塞信号2\n");
+      getchar();
+  
+      sigemptyset(&oldset);
+      sigemptyset(&set);
+      sigaddset(&set, SIGINT);
+  
+      // 设置屏蔽编号为2的信号
+      ret = sigprocmask(SIG_BLOCK, &set, &oldset);
+      if (-1 == ret)
+      {
+          perror("sigprocmask");
+          return 1;
+      }
+  
+      printf("设置屏蔽编号为2的信号成功...\n");
+  
+      printf("按下任意键解除编号为2的信号的阻塞...\n");
+      getchar();
+  
+      // 将信号屏蔽集设置为原来的集合
+      ret = sigprocmask(SIG_SETMASK, &oldset, NULL);
+      if (-1 == ret)
+      {
+          perror("sigprocmask");
+          return 1;
+      }
+      printf("除屏蔽编号为2的信号成功...\n");
+  
+      printf("按下任意键 退出...\n");
+      getchar();
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/signal$ ./a.out 
+  > 按下任意键 阻塞信号2
+  > ^C捕捉到信号：2
+  > ^C捕捉到信号：2
+  > ^C捕捉到信号：2
+  > ^C捕捉到信号：2
+  > ^C捕捉到信号：2
+  >
+  > 设置屏蔽编号为2的信号成功...
+  > 按下任意键解除编号为2的信号的阻塞...
+  > ^C^C^C^C^C^C^C^C^C^C^C^C
+  > 捕捉到信号：2
+  > 除屏蔽编号为2的信号成功...
+  > 按下任意键 退出...
+  > ^C捕捉到信号：2
+  > ^C捕捉到信号：2
+  > ^C捕捉到信号：2
+  > ^C捕捉到信号：2
+  >
+  > jomo@jomo-virtual-machine:~/linux_server/signal$ 
+
+- sigpending函数
+
+  ![image-20231201153059258](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201153059258.png)
+
+
+
+
+
+**信号捕捉**
+
+- 信号处理方式
+
+  ![image-20231201162005230](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201162005230.png)
+
+  ![image-20231201163847237](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201163847237.png)
+
+- signal函数
+
+  ![image-20231201132550834](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201132550834.png)
+
+  sighandler_t是一个函数指针（即指向一个函数，该函数返回类型是void，参数列表只有一个int类型的）
+
+  ![image-20231201132926239](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201132926239.png)
+
+  该函数由ANSI定义，由于历史原因在不同版本的Unix和不同版本的Linux中可能有不同的行为。因此应该尽量避免使用它，取而代之使用的是sigaction函数
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  #include <signal.h>
+  
+  // 信号处理函数1
+  void fun1(int signum)
+  {
+      printf("捕捉到信号：%d\n", signum);
+  }
+  
+  // 信号处理函数2
+  void fun2(int signum)
+  {
+      printf("捕捉到信号：%d\n", signum);
+  }
+  
+  // 信号注册函数
+  int main(void)
+  {
+      // 信号注册
+      // Ctrl + 'c'
+      // 把Ctrl + 'c'的信号处理函数改为fun1（本来是默认终止进程）
+      signal(SIGINT, fun1);// （异步）相当于只要来了SIGINT信号，就会执行fun1函数（信号处理函数）
+  
+      // Ctrl + '\'
+      signal(SIGQUIT, fun2);
+  
+      while (1)
+      {
+          sleep(1);
+      }
+  
+      return 0;
+  }
+  ```
+
+  ![](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201133830674.png)
+
+- sigaction函数
+
+  ![image-20231201164059536](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201164059536.png)
+
+  ![image-20231201164449985](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201164449985.png)
+
+  ![image-20231201164503475](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201164503475.png)
+
+  ![image-20231201165038358](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201165038358.png)
+
+- sigqueue函数
+
+  ![image-20231201165139790](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201165139790.png)
+
+
+
+**不可重入、可重入函数**
+
+![image-20231201165323016](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201165323016.png)
+
+注意：信号处理函数应该为可重入函数
+
+
+
+**SIGCHLD信号**
+
+- SIGCHLD信号产生的条件
+
+  1. 子进程终止时
+  2. 子进程接收SIGSTOP信号停止时
+  3. 子进程处在停止态，接受到SIGCONT后唤醒时
+
+- 如何避免僵尸进程
+
+  ![image-20231201170344870](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201170344870.png)
+
+  ```c
+  // SIGCHLD信号处理函数
+  void sig_child(int signo)
+  {
+      pid_t pid;
+      
+      // 处理僵尸进程，-1 代表等待任意一个子进程，WNOHANG代表不阻塞
+      while((pid = waitpid(-1, NULL, WNOHANG)) > 0)
+      {
+          printf("child %d terminated.\n", pid);
+      }
+  }
+  ```
+
+  ![image-20231201170643623](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231201170643623.png)
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  #include <signal.h>
+  #include <fcntl.h>
+  
+  int main(void)
+  {
+      pid_t pid = -1;
+  
+      // 忽略子进程退出信号的信号
+      // 那么子进程结束后，内核会回收，并不再给父进程发送信号
+      signal(SIGCHLD, SIG_IGN);
+  
+      // 创建一个子进程
+      pid = fork();
+      if (-1 == pid)
+      {
+          perror("fork");
+          return 1;
+      }
+  
+      // 子进程
+      if (0 == pid)
+      {
+          printf("子进程休息2s...\n");
+          sleep(2);
+          printf("子进程退出...\n");
+          exit(0);
+      }
+      else
+      {
+          // 父进程
+          while (1)
+          {
+              printf("父进程do working...\n");
+              sleep(1);
+          }
+      }
+  
+      return 0;
+  }
+  ```
+
+  
