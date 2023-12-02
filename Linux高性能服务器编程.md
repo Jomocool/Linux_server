@@ -1086,8 +1086,8 @@ perror("fopen err")：打印错误原因的字符串
 
 ```c
 #include <stdio.h>
-#include<errno.h>
-#include<string.h>
+#include <errno.h>
+#include <string.h>
 
 // errno是一个全局变量，在errno.h头文件中有定义
 // errno是保存系统最近出错错误码
@@ -3222,3 +3222,226 @@ Action为默认动作：
   ```
 
   
+
+## 11. 守护进程
+
+**终端的概念**
+
+![image-20231202110704431](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202110704431.png)
+
+![image-20231202111143273](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202111143273.png)
+
+所以我们实际上只是在控制一个Shell进程而已
+
+
+
+**进程组概念**
+
+- 进程组概述
+
+  ![image-20231202111528288](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202111528288.png)
+
+- 相关函数
+
+  ![image-20231202112144489](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202112144489.png)
+
+
+
+**会话**
+
+- 会话概念
+
+  ![image-20231202113752811](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202113752811.png)
+
+- 创建会话注意事项
+
+  ![image-20231202113906814](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202113906814.png)
+
+- API函数
+
+  - getsid
+
+    ![image-20231202115348994](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202115348994.png)
+
+  - setsid
+
+    ![image-20231202115612288](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202115612288.png)
+
+
+
+**守护进程（重点）**
+
+- 守护进程介绍
+
+  ![image-20231202124729923](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231202124729923.png)
+
+- 守护进程模型
+
+  1. 创建子进程，父进程必须退出（父进程如果不退出，在设置会话时会报错）
+     - 所有工作在子进程中进行形式上脱离了控制终端
+  2. 在子进程中创建新会话（必须）
+     - setsid()
+     - 使子进程完全独立出来，脱离控制（新会话没有控制终端）
+     - 此时子进程是会话会长也是进程组组长
+  3. 改变当前工作目录为根目录（非必须）（因为无论如何，根目录都存在）
+     - chdir()
+     - 防止占用可卸载的文件系统
+     - 也可以换成其它路径
+  4. 重设文件掩码（非必须）
+     - umash()
+     - 防止继承的文件创建屏蔽字拒绝某些权限
+     - 增加守护进程灵活性
+  5. 关闭文件描述符（非必须）
+     - 继承的打开文件不会用到，浪费系统资源，无法卸载
+  6. 开始执行守护进程核心工作（必须）
+     - 守护进程退出处理程序模型
+
+  ```c
+  #include <stab.h>
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  
+  #include <unistd.h>
+  #include <fcntl.h>
+  #include <sys/stat.h>
+  #include <sys/types.h>
+  
+  // 创建守护进程
+  int main(void)
+  {
+      pid_t pid = -1;
+      int ret = -1;
+      // 1.创建子进程 父进程退出
+      pid = fork();
+      if (-1 == pid)
+      {
+          perror("fork");
+          return 1;
+      }
+      if (pid > 0)
+      {
+          // 父进程退出，此时子进程成为孤儿进程，被1号进程收养
+          exit(0);
+      }
+  
+      // 接下里都是子进程执行
+  
+      // 2.创建新的会话 完全脱离控制终端（运行之后，即使关闭当前会话终端，子进程也不会终止）
+      pid = setsid();
+      if (-1 == pid)
+      {
+          perror("setsid");
+          return 1;
+      }
+  
+      // 3.改变当前工作目录
+      ret = chdir("/");
+      if (-1 == ret)
+      {
+          perror("chdir");
+          return 1;
+      }
+  
+      // 4.设置权限掩码 不屏蔽任何权限
+      umask(0);
+  
+      // 5.关闭文件描述符
+      close(STDIN_FILENO);  // 关闭标准输入
+      close(STDOUT_FILENO); // 关闭标准输出
+      close(STDERR_FILENO); // 关闭标准错误输出
+  
+      // 6.执行核心的任务
+      // 每隔1分钟输出当前时间到/tmp/txt.log文件中
+      while (1)
+      {
+          system("date >> /tmp/txt.log"); // 像终端一样执行命令行
+          sleep(60);
+      }
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ ./a.out 
+  > jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ cat /tmp/txt.log 
+  > 2023年 12月 02日 星期六 16:59:47 CST
+  > jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ tail -f /tmp/txt.log #以动态的方式查看文件
+  > 2023年 12月 02日 星期六 16:59:47 CST
+  > 2023年 12月 02日 星期六 17:00:47 CST
+  > 2023年 12月 02日 星期六 17:01:47 CST
+  > 2023年 12月 02日 星期六 17:02:47 CST
+
+
+
+**获取当前系统时间**
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <time.h>
+
+#define SIZE 32
+
+int main(void)
+{
+    time_t t = -1;
+
+    struct tm *pT = NULL;
+
+    char file_name[SIZE];
+
+    // 获取时间 秒
+    t = time(NULL);
+    if (-1 == t)
+    {
+        perror("time");
+        return 1;
+    }
+    printf("t: %ld\n", t);
+
+    printf("ctime: %s\n", ctime(&t));
+
+    // 转化为时间
+    pT = localtime(&t);
+    if (NULL == pT)
+    {
+        printf("local time failed...\n");
+    }
+
+    printf("year: %d\n", pT->tm_year + 1900);
+    printf("month: %d\n", pT->tm_mon + 1);
+    printf("day: %d\n", pT->tm_mday);
+    printf("hout: %d\n", pT->tm_hour);
+    printf("min: %d\n", pT->tm_min);
+    printf("sec: %d\n", pT->tm_sec);
+
+    // 转化为文件名
+    memset(file_name, 0, SIZE);
+    sprintf(file_name, "%s %d%d%d%d%d%d.log", "touch", pT->tm_year + 1900, pT->tm_mon, pT->tm_mday, pT->tm_hour, pT->tm_min, pT->tm_sec);
+
+    printf("file_name: %s\n", file_name);
+
+    system(file_name);
+
+    return 0;
+}
+```
+
+> jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ gcc time.c 
+> jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ ./a.out 
+> t: 1701509442
+> ctime: Sat Dec  2 17:30:42 2023
+>
+> year: 2023
+> month: 12
+> day: 2
+> hout: 17
+> min: 30
+> sec: 42
+> file_name: touch 2023112173042.log
+> jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ ls
+> 2023112173042.log  a.out  daemon.c  time.c
+> jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ 
