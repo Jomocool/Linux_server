@@ -3448,3 +3448,498 @@ int main(void)
 
 
 
+## 12. 线程
+
+**线程概念**
+
+![image-20231203155655741](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203155655741.png)
+
+![image-20231203155812821](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203155812821.png)
+
+![image-20231203155852975](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203155852975.png)
+
+`进程是操作系统分配资源的最小单位`
+
+`线程是操作系统调度的最小单位`
+
+
+
+**线程函数列表安装**
+
+命令：
+
+> sudo apt-get install manpages-posix-dev
+>
+> 【说明】manpages-posix-dev包含POSIX的header files和library calls的用法
+
+查看：
+
+> man -k pthread
+
+
+
+**NPTL**
+
+![image-20231203160517714](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203160517714.png)
+
+![image-20231203160804969](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203160804969.png)
+
+
+
+**线程的特点**
+
+![image-20231203160837633](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203160837633.png)
+
+![image-20231203161000672](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203161000672.png)
+
+查看指定进程的LWP号：
+
+> ps -Lf pid
+
+![image-20231203161124649](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203161124649.png)
+
+复制：深拷贝
+
+共享：浅拷贝
+
+
+
+**线程共享资源**
+
+- 文件描述符表
+- 每种信号的处理方式
+- 当前工作目录
+- 用户ID和组ID
+- 内存地址空间(.text(代码段)/.data(已初始化数据段)/.bss(未初始化数据段)/heap(堆)/共享库)
+
+
+
+**线程非共享资源**
+
+- 线程id
+- 处理器现场和栈指针（内核栈）
+- 独立的栈空间（用户空间栈）
+- errno变量
+- 信号屏蔽字
+- 调度优先级
+
+- 线程优缺点
+
+  - **优点：**
+
+    1. 提高程序并发性
+    2. 开销小
+    3. 数据通信、共享数据方便
+
+  - **缺点：**
+
+    1. 库函数，不稳定
+    2. 调试、编写困难、gdb不支持
+    3. 对信号支持不好
+
+    优点相对突出，缺点均不是硬伤。Linux下由于实现方法导致进程、线程差别不是很大
+
+
+
+**线程常用操作**
+
+- 线程号
+
+  ![image-20231203162558273](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203162558273.png)
+
+  
+
+  pthread_self函数：
+
+  ```c
+  #include <pthread.h>
+  
+  pthread_t pthread_self(void);
+  功能：
+      获取线程号
+  参数：
+      无
+  返回值：
+      调用线程的线程ID
+  ```
+
+  pthread_equal函数：
+
+  ```c
+  int pthread_equal(pthread_t t1,pthread_t t2);
+  功能：
+      判断线程号t1和t2是否相等，为了方便移植，尽量使用函数来比较线程ID
+  参数：
+      t1，t2：待判断的线程号
+  返回值：
+      相等：非0
+      不相等：0
+  ```
+
+  测试程序：
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  
+  #include <pthread.h>
+  
+  // 指定链接线程库
+  // jomo@jomo-virtual-machine:~/linux_server/thread$ gcc pthread_self.c -pthread
+  // 线程常用函数
+  int main(void)
+  {
+      pthread_t tid = 0;
+  
+      // 由于每个进程默认有一个线程，这里我们没有创建线程，所以当前线程就是默认的那个线程
+      // 获取当前线程的线程号
+      tid = pthread_self();
+  
+      printf("tid: %lu\n", tid);
+  
+      // 比较两个线程ID是否相同
+      if (pthread_equal(tid, pthread_self()))
+      {
+          printf("两个线程ID相同...\n");
+      }
+      else
+      {
+          printf("两个线程ID不相同...\n");
+      }
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ gcc pthread_self.c -pthread 
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ ./a.out 
+  > tid: 140020080564032
+  > 两个线程ID相同...
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ 
+
+- 线程的创建
+
+  pthread_create函数：
+
+  ![image-20231203163902181](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203163902181.png)
+
+  ![image-20231203164104150](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203164104150.png)
+
+  测试程序：
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  
+  #include <pthread.h>
+  
+  // 线程1调度之后执行的函数
+  void *fun(void *arg)
+  {
+      printf("新的线程执行任务 tid: %lu\n", pthread_self());
+  
+      return NULL;
+  }
+  
+  // 线程2调度之后执行的函数
+  void *fun1(void *arg)
+  {
+      // int var = (int)arg; 字节大小不同，指针在64位机器上站8个字节，而int占4个字节
+      // 传入0x3是一个地址，但是要把它当作整型取出，如果直接解引用，会引起段错误（即访问到不属于当前进程的内存地址了）
+      int var = (int)(long)arg; // 先强转为8字节的long，再强转为4字节的int
+  
+      printf("线程2 var = %d\n", var);
+  
+      return NULL;
+  }
+  
+  int main(void)
+  {
+      int ret = -1;
+      pthread_t tid1 = -1;
+      pthread_t tid2 = -1;
+  
+      // 创建一个线程
+      ret = pthread_create(&tid1, NULL, fun, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_create failed...\n");
+          return 1;
+      }
+  
+      // 创建一个线程
+      ret = pthread_create(&tid2, NULL, fun1, (void *)0x3);
+      if (0 != ret)
+      {
+          printf("pthread_create failed...\n");
+          return 1;
+      }
+  
+      printf("main thread... tid1: %lu\n", pthread_self());
+  
+      printf("按下任意键主线程退出...\n");
+      getchar();
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ gcc pthread_create.c -pthread 
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ ./a.out 
+  > main thread... tid1: 140072367859520
+  > 按下任意键主线程退出...
+  > 新的线程执行任务 tid: 140072364013120
+  > 线程2 var = 3
+  >
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ 
+
+- 多线程共享资源验证
+
+  ```c
+  #include <stdlib.h>
+  #include <stdio.h>
+  #include <string.h>
+  #include <unistd.h>
+  
+  #include <pthread.h>
+  
+  int num = 99; // 用于验证共享data segment
+  
+  void *fun(void *arg)
+  {
+      int *pn = (int *)arg;
+      printf("thread: num=%d *p=%d\n", num, *pn);
+      printf("thread: execute\"num++ and *pn++\"\n");
+      num++;
+      (*pn)++;
+      printf("thread: num=%d *p=%d\n", num, *pn);
+  }
+  
+  int main(void)
+  {
+      int ret = -1;
+      pthread_t tid = -1;
+  
+      // 用于验证共享堆
+      int *p = malloc(sizeof(int));
+      memset(p, 0, sizeof(int));
+      *p = 99;
+  
+      // 创建线程
+      ret = pthread_create(&tid, NULL, fun, (void *)p);
+      if (0 != ret)
+      {
+          printf("pthread_create failed...\n");
+          return 1;
+      }
+  
+      sleep(5);
+  
+      printf("main thread: num=%d *p=%d\n", num, *p);
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ ./a.out 
+  > thread: num=99 *p=99
+  > thread: execute"num++ and *pn++"
+  > thread: num=100 *p=100
+  > main thread: num=100 *p=100
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ 
+
+  在新创建的线程中修改num和*p的值，主线程对应的值也被修改了，说明线程之间是共享资源的（除了栈）
+
+- 线程资源回收
+
+  pthread_join函数：
+
+  ![image-20231203183412542](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203183412542.png)
+
+  测试程序：
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  
+  #include <pthread.h>
+  
+  // 线程处理函数
+  void *fun(void *arg)
+  {
+      int i = 0;
+  
+      for (i = 0; i < 5; i++)
+      {
+          printf("fun thread do working %d\n", i);
+          sleep(1);
+      }
+  
+      return (void *)0x3;
+  }
+  
+  // 回收线程的资源
+  int main(void)
+  {
+      int ret = -1;
+      void *retp = NULL;
+      pthread_t tid = -1;
+  
+      // 创建一个线程
+      ret = pthread_create(&tid, NULL, fun, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_create failed...\n");
+          return 1;
+      }
+  
+      printf("main thread running...\n");
+  
+      // 等待线程结束 会阻塞
+      ret = pthread_join(tid, &retp);
+      if (0 != ret)
+      {
+          printf("pthread_join failed...\n");
+          return 1;
+      }
+  
+      printf("retp: %p\n", retp);
+      printf("main thread exit.\n");
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ gcc pthread_join.c -pthread 
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ ./a.out 
+  > main thread running...
+  > fun thread do working 0
+  > fun thread do working 1
+  > fun thread do working 2
+  > fun thread do working 3
+  > fun thread do working 4
+  > retp: 0x3
+  > main thread exit.
+
+  实现一个双线程打印机：
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  
+  #include <pthread.h>
+  
+  void *fun1(void *arg)
+  {
+      int i = 0;
+      for (i = 'A'; i <= 'Z'; i++)
+      {
+          putchar(i);
+          fflush(stdout); // 刷新标准输出缓存区，让缓冲区中的信息显示到终端上
+          usleep(100000); // 100ms
+      }
+  
+      return NULL;
+  }
+  
+  void *fun2(void *arg)
+  {
+      int i = 0;
+      for (i = 'a'; i <= 'z'; i++)
+      {
+          putchar(i);
+          fflush(stdout);
+          usleep(100000); // 100ms
+      }
+  
+      return NULL;
+  }
+  
+  // 模拟输出字符
+  int main(void)
+  {
+      pthread_t tid1, tid2;
+  
+      // 创建两个线程
+      pthread_create(&tid1, NULL, fun1, NULL);
+      pthread_create(&tid2, NULL, fun2, NULL);
+  
+      // 等待两个线程结束
+      pthread_join(tid1, NULL);
+      pthread_join(tid2, NULL);
+  
+      printf("\nmain thread exit...\n");
+  
+      return 0;
+  }
+  ```
+
+  > omo@jomo-virtual-machine:~/linux_server/thread$ gcc printer.c -pthread 
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ ./a.out 
+  > AabBCcdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ
+  > main thread exit...
+  > jomo@jomo-virtual-machine:~/linux_server/thread$ 
+
+- 线程分离
+
+  ![image-20231203185732338](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203185732338.png)
+
+  pthread_detach函数：
+
+  ![image-20231203185841354](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203185841354.png)
+
+  但是如果主线程退出了，其余线程都无法继续执行了，因为所有子线程都是共用进程的资源（主线程退出，进程也退出了）
+
+- 线程退出
+
+  ![image-20231203190341897](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203190341897.png)
+
+  pthread_exit函数：
+
+  ![image-20231203190521521](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203190521521.png)
+
+- 线程取消
+
+  只能取消同一个进程中的线程
+
+  pthread_cancel函数：
+
+  ![image-20231203190625056](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203190625056.png)
+
+
+
+**线程属性**
+
+- 概述
+
+  ![image-20231203191103855](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191103855.png)
+
+  ![image-20231203191138983](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191138983.png)
+
+- 线程属性初始化和销毁
+
+  ![image-20231203191316122](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191316122.png)
+
+- 线程分离状态设置
+
+  ![image-20231203191418908](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191418908.png)
+
+  ![image-20231203191456823](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191456823.png)
+
+- 线程栈地址设置
+
+  ![image-20231203191625297](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191625297.png)
+
+  ![image-20231203191649020](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191649020.png)
+
+- 线程栈大小设置
+
+  ![image-20231203191719672](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191719672.png)
+
+- 线程使用注意事项
+
+  ![image-20231203191745169](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191745169.png)
