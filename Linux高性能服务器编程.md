@@ -3445,3 +3445,6 @@ int main(void)
 > jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ ls
 > 2023112173042.log  a.out  daemon.c  time.c
 > jomo@jomo-virtual-machine:~/Linux_server/code/daemon$ 
+
+
+
