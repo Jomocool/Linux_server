@@ -3943,3 +3943,308 @@ int main(void)
 - 线程使用注意事项
 
   ![image-20231203191745169](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231203191745169.png)
+
+
+
+## 13. 锁
+
+**互斥锁**
+
+- 同步与互斥
+
+  ![image-20231207140706622](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207140706622.png)
+
+- 为什么需要互斥锁
+
+  ![image-20231207141302612](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207141302612.png)
+
+- 互斥锁Mutex
+
+  ![](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207141621048.png)
+
+- pthread_mutex_init函数
+
+  ![image-20231207150846012](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207150846012.png)
+
+  restrict，C语言中的一种类型限定符（Type Qualifiers），用于告诉编译器，对象已经被指针所引用，不能通过该指针外所有其他直接或间接的方式修改该对象的内容
+
+- pthread_mutex_destroy函数
+
+  ![image-20231207151217124](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207151217124.png)
+
+- pthread_mutex_lock函数
+
+  ![image-20231207151542498](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207151542498.png)
+
+- pthread_mutex_unlock函数
+
+  ![image-20231207151551769](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207151551769.png)
+
+- 测试程序
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  
+  #include <pthread.h>
+  
+  // 全局变量作用域是从声明那行直至文件末端，比如mutex作用域从第11行开始直至最后一行
+  
+  // 互斥锁变量
+  pthread_mutex_t mutex;
+  
+  void *fun1(void *arg)
+  {
+      int i = 0;
+  
+      // 加锁
+      pthread_mutex_lock(&mutex);
+  
+      // 临界区代码：
+      for (i = 'A'; i <= 'Z'; i++)
+      {
+          putchar(i);
+          fflush(stdout); // 刷新标准输出缓存区，让缓冲区中的信息显示到终端上
+          usleep(100000); // 100ms
+      }
+  
+      // 解锁
+      pthread_mutex_unlock(&mutex);
+  
+      return NULL;
+  }
+  
+  void *fun2(void *arg)
+  {
+      int i = 0;
+  
+      // 加锁
+      pthread_mutex_lock(&mutex);
+  
+      // 临界区代码：
+      for (i = 'a'; i <= 'z'; i++)
+      {
+          putchar(i);
+          fflush(stdout);
+          usleep(100000); // 100ms
+      }
+  
+      // 解锁
+      pthread_mutex_unlock(&mutex);
+  
+      return NULL;
+  }
+  
+  int num;
+  
+  // 模拟输出字符(互斥)
+  int main(void)
+  {
+      int ret = -1;
+      pthread_t tid1, tid2;
+  
+      // 初始化一个互斥量，即互斥锁
+      ret = pthread_mutex_init(&mutex, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_mutex_init failed...\n");
+          return 1;
+      }
+      printf("初始化一个互斥锁成功...\n");
+  
+      // 创建两个线程
+      pthread_create(&tid1, NULL, fun1, NULL);
+      pthread_create(&tid2, NULL, fun2, NULL);
+  
+      // 等待两个线程结束
+      pthread_join(tid1, NULL);
+      pthread_join(tid2, NULL);
+  
+      printf("\nmain thread exit...\n");
+  
+      // 销毁互斥锁
+      pthread_mutex_destroy(&mutex);
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/lock$ gcc printer_mutex.c 
+  > jomo@jomo-virtual-machine:~/linux_server/lock$ ./a.out 
+  > 初始化一个互斥锁成功...
+  > ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+  > main thread exit...
+  > jomo@jomo-virtual-machine:~/linux_server/lock$ 
+
+- 死锁
+
+  ![image-20231207155255813](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207155255813.png)
+
+  ![image-20231207155429131](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207155429131.png)
+
+  ![image-20231207155516615](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207155516615.png)
+
+  ![image-20231207155612226](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207155612226.png)
+
+
+
+**读写锁**
+
+- 读写锁概述
+
+  ![image-20231207160146395](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207160146395.png)
+
+- pthread_rwlock_init函数
+
+  ![image-20231207171100576](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207171100576.png)
+
+- pthread_rwlock_destroy函数
+
+  ![image-20231207171141496](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207171141496.png)
+
+- pthread_rwlock_rdlock函数
+
+  ![image-20231207171203134](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207171203134.png)
+
+- pthread_rwlock_wrlock函数
+
+  ![image-20231207171341462](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207171341462.png)
+
+- pthread_rwlock_unlock函数
+
+  ![image-20231207171806662](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231207171806662.png)
+
+  可以解开读锁或写锁的，因为读锁或写锁肯定不会同时存在，即读写锁必然只会处于一种状态读锁或写锁
+
+- 测试程序
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  
+  #include <pthread.h>
+  #include <bits/pthreadtypes.h>
+  
+  // 读写锁变量
+  pthread_rwlock_t rwlock;
+  
+  // 全局变量
+  int num = 0;
+  
+  // 读线程
+  void *fun_read(void *arg)
+  {
+      // 获取线程的编号
+      int index = (int)(long)arg;
+  
+      while (1)
+      {
+          // 加读写锁读锁
+          pthread_rwlock_rdlock(&rwlock);
+  
+          printf("读线程%d 读取num的值 %d\n", index, num);
+  
+          // 解锁
+          pthread_rwlock_unlock(&rwlock);
+  
+          // 随机睡眠1~3秒
+          sleep(random() % 3 + 1);
+      }
+  
+      return NULL;
+  }
+  
+  void *fun_write(void *arg)
+  {
+      // 获取线程的编号
+      int index = (int)(long)arg;
+  
+      while (1)
+      {
+          // 加读写锁写锁
+          pthread_rwlock_wrlock(&rwlock);
+  
+          num++;
+          printf("写线程%d 修改num的值 %d\n", index, num);
+  
+          // 随机睡眠1~3秒
+          sleep(random() % 3 + 1);
+  
+          // 解锁
+          pthread_rwlock_unlock(&rwlock);
+      }
+  
+      return NULL;
+  }
+  
+  // 写线程
+  
+  int main(void)
+  {
+      int i = 0;
+      int ret = -1;
+      pthread_t tid[8];
+  
+      // 初始化读写锁
+      ret = pthread_rwlock_init(&rwlock, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_rwlock_init failed...\n");
+          return 1;
+      }
+  
+      // 设置随机种子
+      srandom(getpid());
+  
+      // 创建8个线程
+      for (i = 0; i < 8; i++)
+      {
+          if (i < 5)
+          {
+              // 创建读线程
+              pthread_create(&tid[i], NULL, fun_read, (void *)(long)i);
+          }
+          else
+          {
+              // 创建写线程
+              pthread_create(&tid[i], NULL, fun_write, (void *)(long)i);
+          }
+      }
+  
+      // 回收8个线程资源
+      for (i = 0; i < 8; i++)
+      {
+          pthread_join(tid[i], NULL);
+      }
+  
+      // 销毁读写锁
+      pthread_rwlock_destroy(&rwlock);
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/lock$ ./a.out 
+  > 读线程0 读取num的值 0
+  > 读线程2 读取num的值 0
+  > 读线程1 读取num的值 0
+  > 读线程3 读取num的值 0
+  > 读线程4 读取num的值 0
+  > 写线程6 修改num的值 1
+  > 写线程6 修改num的值 2
+  > 读线程4 读取num的值 2
+  > 读线程2 读取num的值 2
+  > 读线程3 读取num的值 2
+  > 读线程0 读取num的值 2
+  > 读线程1 读取num的值 2
+  > 写线程6 修改num的值 3
+  > 读线程1 读取num的值 3
+  > 写线程6 修改num的值 4
+
+  写比读的优先级更高，假设现在有一个线程拿到了写锁，然后其它线程申请了写锁和读锁，最终申请写锁那个线程会获取到写锁，因为写的优先级更高
+
+  
