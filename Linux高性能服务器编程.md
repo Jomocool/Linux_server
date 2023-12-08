@@ -4247,4 +4247,610 @@ int main(void)
 
   写比读的优先级更高，假设现在有一个线程拿到了写锁，然后其它线程申请了写锁和读锁，最终申请写锁那个线程会获取到写锁，因为写的优先级更高
 
+
+
+
+## 14. 条件变量
+
+- 条件变量概述
+
+  ![image-20231208153055247](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208153055247.png)
+
+- pthread_cond_init函数
+
+  ![image-20231208153250415](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208153250415.png)
+
+- pthread_cond_destroy函数
+
+  ![image-20231208153344832](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208153344832.png)
+
+- pthread_cond_wait函数
+
+  ![image-20231208153531512](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208153531512.png)
+
+  ![image-20231208153557427](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208153557427.png)
+
+  ![image-20231208153649628](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208153649628.png)
+
+- pthread_cond_signal函数
+
+  ![image-20231208153851373](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208153851373.png)
+
+- 测试程序
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
   
+  #include <pthread.h>
+  
+  int flag = 0;
+  
+  // 互斥量
+  pthread_mutex_t mutex;
+  // 条件变量
+  pthread_cond_t cond;
+  
+  // 改变条件的线程
+  void *fun1(void *arg)
+  {
+      while (1)
+      {
+          // 加锁
+          pthread_mutex_lock(&mutex);
+          flag = 1;
+  
+          // 先解锁再唤醒其它线程，否则可能会出现其它线程阻塞在获取锁
+          // 解锁
+          pthread_mutex_unlock(&mutex);
+  
+          // 唤醒因为条件而阻塞线程
+          pthread_cond_signal(&cond);
+  
+          sleep(2);
+      }
+  
+      return NULL;
+  }
+  
+  // 等待条件的线程
+  void *fun2(void *arg)
+  {
+      while (1)
+      {
+          // 加锁
+          pthread_mutex_lock(&mutex);
+  
+          // 表示条件不满足
+          if (0 == flag)
+          {
+              // 等待条件不满足，会阻塞并释放mutex
+              // 被唤醒之后，解放阻塞并重新申请mutex
+              pthread_cond_wait(&cond, &mutex);
+          }
+          printf("线程二因为条件满足 开始运行...\n");
+          flag = 0;
+  
+          // 解锁
+          pthread_mutex_unlock(&mutex);
+      }
+  
+      return NULL;
+  }
+  
+  // 条件变量的应用
+  int main(void)
+  {
+      int ret = -1;
+      pthread_t tid1, tid2;
+  
+      // 初始化条件变量
+      ret = pthread_cond_init(&cond, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_cond_init failed..\n");
+          return 1;
+      }
+  
+      // 初始化互斥量
+      ret = pthread_mutex_init(&mutex, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_mutex_init failed..\n");
+          return 1;
+      }
+  
+      // 创建两个线程
+      pthread_create(&tid1, NULL, fun1, NULL);
+      pthread_create(&tid2, NULL, fun2, NULL);
+  
+      // 回收线程资源
+      ret = pthread_join(tid1, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_join failed...\n");
+          return 1;
+      }
+  
+      ret = pthread_join(tid2, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_join failed...\n");
+          return 1;
+      }
+  
+      // 销毁互斥量
+      pthread_mutex_destroy(&mutex);
+  
+      // 销毁条件变量
+      pthread_cond_destroy(&cond);
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/cond$ gcc pthread_cond_init.c 
+  > jomo@jomo-virtual-machine:~/linux_server/cond$ ./a.out 
+  > 线程二因为条件满足 开始运行...
+  > 线程二因为条件满足 开始运行...
+  > 线程二因为条件满足 开始运行...
+  > 线程二因为条件满足 开始运行...
+
+- 生产者和消费者条件变量模型
+
+  ![image-20231208160933656](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208160933656.png)
+
+  生产者消费者模型代码：
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  
+  #include <pthread.h>
+  
+  typedef struct _node_t
+  {
+      int data;
+      struct _node_t *next; // 这里必须使用原始结构名声明，因为此时还不知道别名node_t
+  } node_t;
+  
+  node_t *head = NULL;
+  
+  // 互斥量
+  pthread_mutex_t mutex;
+  // 条件变量
+  pthread_cond_t cond;
+  
+  // 生产者线程
+  void *producer(void *arg)
+  {
+      // 循环生产产品
+      while (1)
+      {
+          // 加锁
+          pthread_mutex_lock(&mutex);
+  
+          // 分配节点空间
+          node_t *new = malloc(sizeof(node_t));
+          if (NULL == new)
+          {
+              printf("malloc failed...\n");
+              break;
+          }
+          memset(new, 0, sizeof(node_t));
+          new->data = random() % 100 + 1;
+          new->next = NULL;
+          printf("生产者生产产品 %d\n", new->data);
+  
+          // 头插法
+          new->next = head;
+          head = new;
+  
+          // 解锁
+          pthread_mutex_unlock(&mutex);
+  
+          // 唤醒因为条件变量而阻塞的线程
+          pthread_cond_signal(&cond);
+  
+          // 随机睡眠
+          sleep(random() % 3 + 1);
+      }
+  
+      pthread_exit(NULL);
+  }
+  
+  // 消费者线程
+  void *customer(void *arg)
+  {
+      node_t *tmp = NULL;
+      // 循环消费
+      while (1)
+      {
+          // 加锁
+          pthread_mutex_lock(&mutex);
+  
+          if (NULL == head)
+          {
+              // 等待...
+              pthread_cond_wait(&cond, &mutex);
+          }
+          else
+          {
+              // 消费第一个节点
+              tmp = head;
+              head = head->next;
+              printf("消费者消费 %d\n", tmp->data);
+              free(tmp);
+          }
+  
+          // 解锁
+          pthread_mutex_unlock(&mutex);
+  
+          // 睡眠1~3秒
+          sleep(random() % 3 + 1);
+      }
+  
+      pthread_exit(NULL);
+  }
+  
+  // 生产者和消费者模型 条件变量的模型
+  int main(void)
+  {
+      int ret = -1;
+  
+      pthread_t tid1 = -1, tid2 = -1;
+  
+      // 设置随机种子
+      srandom(getpid());
+  
+      // 初始化条件变量
+      ret = pthread_cond_init(&cond, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_cond_init failed...\n");
+          return 1;
+      }
+  
+      // 初始化互斥量
+      ret = pthread_mutex_init(&mutex, NULL);
+      if (0 != ret)
+      {
+          printf("pthread_mutexinit failed...\n");
+          return 1;
+      }
+  
+      // 创建两个线程
+      // 生产者线程
+      pthread_create(&tid1, NULL, producer, NULL);
+      // 消费者线程
+      pthread_create(&tid2, NULL, customer, NULL);
+  
+      // 等待两个线程结束
+      pthread_join(tid1, NULL);
+      pthread_join(tid2, NULL);
+  
+      // 销毁
+      pthread_mutex_destroy(&mutex);
+      pthread_cond_destroy(&cond);
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/cond$ gcc prodecer_cond.c 
+  > jomo@jomo-virtual-machine:~/linux_server/cond$ ./a.out 
+  > 生产者生产产品 72
+  > 消费者消费 72
+  > 生产者生产产品 38
+  > 消费者消费 38
+  > 生产者生产产品 8
+  > 生产者生产产品 39
+  > 消费者消费 39
+  > 生产者生产产品 79
+  > 消费者消费 79
+  > 生产者生产产品 6
+  > 消费者消费 6
+  > 消费者消费 8
+  > 生产者生产产品 12
+  > 消费者消费 12
+  > 生产者生产产品 16
+  > 消费者消费 16
+  > ^C
+  > jomo@jomo-virtual-machine:~/linux_server/cond$ 
+
+- 条件变量优缺点
+
+  ![image-20231208170201167](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170201167.png)
+
+
+
+## 15. 信号量
+
+- 信号量概述
+
+  ![image-20231208170319180](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170319180.png)
+
+  ![image-20231208170420582](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170420582.png)
+
+  ![image-20231208170448708](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170448708.png)
+
+- sem_init函数
+
+  ![image-20231208170513704](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170513704.png)
+
+- sem_destroy函数
+
+  ![image-20231208170555384](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170555384.png)
+
+- 信号量P操作（减1）
+
+  ![image-20231208170622644](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170622644.png)
+
+  ![image-20231208170701475](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170701475.png)
+
+- 信号量V操作（加1）
+
+  ![image-20231208170727479](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170727479.png)
+
+- 获取信号量的值
+
+  ![image-20231208170914736](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208170914736.png)
+
+- 信号量用于互斥
+
+  测试程序：
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  
+  #include <pthread.h>
+  #include <semaphore.h>
+  
+  // 信号量变量
+  sem_t sem;
+  
+  void *fun1(void *arg)
+  {
+      int i = 0;
+  
+      // 申请资源 将可用资源减1
+      sem_wait(&sem);
+  
+      // 临界区代码：
+      for (i = 'A'; i <= 'Z'; i++)
+      {
+          putchar(i);
+          fflush(stdout); // 刷新标准输出缓存区，让缓冲区中的信息显示到终端上
+          usleep(100000); // 100ms
+      }
+  
+      // 释放资源 将可用资源加1
+      sem_post(&sem);
+  
+      return NULL;
+  }
+  
+  void *fun2(void *arg)
+  {
+      int i = 0;
+  
+      // 申请资源 将可用资源减1
+      sem_wait(&sem);
+  
+      // 临界区代码：
+      for (i = 'a'; i <= 'z'; i++)
+      {
+          putchar(i);
+          fflush(stdout);
+          usleep(100000); // 100ms
+      }
+  
+      // 释放资源 将可用资源加1
+      sem_post(&sem);
+  
+      return NULL;
+  }
+  
+  int num;
+  
+  // 模拟输出字符(互斥)
+  int main(void)
+  {
+      int ret = -1;
+      pthread_t tid1, tid2;
+  
+      // 初始化一个信号量
+      ret = sem_init(&sem, 0, 1);
+      if (0 != ret)
+      {
+          printf("sem_init failed...\n");
+          return 1;
+      }
+      printf("初始化一个信号量成功...\n");
+  
+      // 创建两个线程
+      pthread_create(&tid1, NULL, fun1, NULL);
+      pthread_create(&tid2, NULL, fun2, NULL);
+  
+      // 等待两个线程结束
+      pthread_join(tid1, NULL);
+      pthread_join(tid2, NULL);
+  
+      printf("\nmain thread exit...\n");
+  
+      // 销毁信号量
+      sem_destroy(&sem);
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/semaphore$ gcc printer_sem.c  -pthread
+  > jomo@jomo-virtual-machine:~/linux_server/semaphore$ ./a.out 
+  > 初始化一个信号量成功...
+  > ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+  > main thread exit...
+  > jomo@jomo-virtual-machine:~/linux_server/semaphore$
+
+- 信号量用于生产者和消费者模型
+
+  ```c
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <string.h>
+  #include <unistd.h>
+  
+  #include <pthread.h>
+  #include <semaphore.h>
+  
+  typedef struct _node_t
+  {
+      int data;
+      struct _node_t *next; // 这里必须使用原始结构名声明，因为此时还不知道别名node_t
+  } node_t;
+  
+  node_t *head = NULL;
+  
+  // 信号量1 (生产者资源: 存放商品容器的个数（容器放满了就不能继续生产了）)
+  sem_t sem1;
+  
+  // 信号量2 (产品资源：可以消费的产品个数)
+  sem_t sem2;
+  
+  // 生产者线程
+  void *producer(void *arg)
+  {
+      // 循环生产产品
+      while (1)
+      {
+          // 申请生产者资源，生产者资源减1
+          sem_wait(&sem1);
+  
+          // 分配节点空间
+          node_t *new = malloc(sizeof(node_t));
+          if (NULL == new)
+          {
+              printf("malloc failed...\n");
+              break;
+          }
+          memset(new, 0, sizeof(node_t));
+          new->data = random() % 100 + 1;
+          new->next = NULL;
+          printf("生产者生产产品 %d\n", new->data);
+  
+          // 头插法
+          new->next = head;
+          head = new;
+  
+          // 产品资源加1
+          sem_post(&sem2);
+  
+          // 随机睡眠
+          sleep(random() % 3 + 1);
+      }
+  
+      pthread_exit(NULL);
+  }
+  
+  // 消费者线程
+  void *customer(void *arg)
+  {
+      node_t *tmp = NULL;
+      // 循环消费
+      while (1)
+      {
+          // 申请产品资源 产品资源减1
+          sem_wait(&sem2);
+  
+          // 消费第一个节点
+          tmp = head;
+          head = head->next;
+          printf("消费者消费 %d\n", tmp->data);
+          free(tmp);
+  
+          // 释放生产者资源
+          sem_post(&sem1);
+  
+          // 睡眠1~3秒
+          sleep(random() % 3 + 1);
+      }
+  
+      pthread_exit(NULL);
+  }
+  
+  // 生产者和消费者模型 条件变量的模型
+  int main(void)
+  {
+      int ret = -1;
+  
+      pthread_t tid1 = -1, tid2 = -1;
+  
+      // 设置随机种子
+      srandom(getpid());
+  
+      // 初始化信号量1，一开始没有产品，因此只有生产者有资源，产品资源等于0
+      ret = sem_init(&sem1, 0, 4);
+      if (0 != ret)
+      {
+          printf("sem_init failed...\n");
+          return 1;
+      }
+  
+      // 初始化信号量2
+      ret = sem_init(&sem2, 0, 0);
+      if (0 != ret)
+      {
+          printf("sem_init failed...\n");
+          return 1;
+      }
+  
+      // 创建两个线程
+      // 生产者线程
+      pthread_create(&tid1, NULL, producer, NULL);
+      // 消费者线程
+      pthread_create(&tid2, NULL, customer, NULL);
+  
+      // 等待两个线程结束
+      pthread_join(tid1, NULL);
+      pthread_join(tid2, NULL);
+  
+      // 销毁
+      sem_destroy(&sem1);
+      sem_destroy(&sem2);
+  
+      return 0;
+  }
+  ```
+
+  > jomo@jomo-virtual-machine:~/linux_server/semaphore$ gcc producer_sem.c -pthread 
+  > jomo@jomo-virtual-machine:~/linux_server/semaphore$ ./a.out 
+  > 生产者生产产品 66
+  > 消费者消费 66
+  > 生产者生产产品 41
+  > 消费者消费 41
+  > 生产者生产产品 48
+  > 消费者消费 48
+  > 生产者生产产品 66
+  > 消费者消费 66
+  > 生产者生产产品 90
+  > 消费者消费 90
+  > 生产者生产产品 5
+  > 生产者生产产品 81
+  > 生产者生产产品 80
+  > 消费者消费 80
+  > 消费者消费 81
+  > 生产者生产产品 41
+  > 消费者消费 41
+  > ^C
+  > jomo@jomo-virtual-machine:~/linux_server/semaphore$ 
+
+- 哲学家就餐问题
+
+  ![image-20231208180140397](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208180140397.png)
