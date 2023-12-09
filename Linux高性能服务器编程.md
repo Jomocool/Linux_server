@@ -1,6 +1,8 @@
-## Linux高性能服务器编程
+# Linux高性能服务器编程
 
-## 1. GCC编译器简洁
+## Linux编程
+
+### 1. GCC编译器简介
 
 ![image-20231028131250285](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231028131250285.png)
 
@@ -43,7 +45,7 @@ int main(void)
 
 
 
-## 2. GCC工作流程和常用选项
+### 2. GCC工作流程和常用选项
 
 | 选项           | 作用                        |
 | -------------- | --------------------------- |
@@ -120,7 +122,7 @@ int main(void)
 
 
 
-## 3. 静态链接和动态链接
+### 3. 静态链接和动态链接
 
 链接分为两种：**静态链接**、**动态链接**
 
@@ -178,7 +180,7 @@ int main(void)
 
 
 
-## 4. 静态库和动态库简介
+### 4. 静态库和动态库简介
 
 #include <file_name> 和 #include"file_name"的区别：
 
@@ -362,7 +364,7 @@ int main(void)
 
 
 
-## 5. 动态库制作和使用
+### 5. 动态库制作和使用
 
 ![image-20231030001622934](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231030001622934.png)
 
@@ -505,7 +507,7 @@ int main(void)
 
 
 
-## 6. GDB调试器
+### 6. GDB调试器
 
 **GDB简介：**
 
@@ -681,7 +683,7 @@ int main(int argc, char *argv[])
 
 
 
-## 7. Makefile
+### 7. Makefile
 
 **Makefile简介**
 
@@ -1038,7 +1040,7 @@ clean:
 
 
 
-## 8. 系统调用
+### 8. 系统调用
 
 **什么是系统调用？**
 
@@ -1362,7 +1364,7 @@ int main(int argc, char *argv[])
 
 
 
-## 9. 进程
+### 9. 进程
 
 ![image-20231122102057103](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231122102057103.png)
 
@@ -2696,7 +2698,7 @@ int main(void)
 
 
 
-## 10. 信号
+### 10. 信号
 
 **信号的概念**
 
@@ -3223,7 +3225,7 @@ Action为默认动作：
 
   
 
-## 11. 守护进程
+### 11. 守护进程
 
 **终端的概念**
 
@@ -3448,7 +3450,7 @@ int main(void)
 
 
 
-## 12. 线程
+### 12. 线程
 
 **线程概念**
 
@@ -3946,7 +3948,7 @@ int main(void)
 
 
 
-## 13. 锁
+### 13. 锁
 
 **互斥锁**
 
@@ -4250,7 +4252,7 @@ int main(void)
 
 
 
-## 14. 条件变量
+### 14. 条件变量
 
 - 条件变量概述
 
@@ -4568,7 +4570,7 @@ int main(void)
 
 
 
-## 15. 信号量
+### 15. 信号量
 
 - 信号量概述
 
@@ -4854,3 +4856,180 @@ int main(void)
 - 哲学家就餐问题
 
   ![image-20231208180140397](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231208180140397.png)
+
+
+
+## 网络编程
+
+### 1. 网络基础
+
+**地址**
+
+- 网卡
+
+  ![image-20231209143708377](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209143708377.png)
+
+- MAC地址
+
+  网卡的id，理论上该id是全球唯一。
+
+  一般用来标识主机的id，这个id是物理地址，不会改变的
+
+  6字节，48位
+
+- IP地址
+
+  标识主机的id，这个id是虚拟地址，是会改变的
+
+  一个IP将其分为子网id和主机id
+
+  子网id和主机id需要和子网掩码一起工作
+
+  ipv4:：4字节，32位
+
+  ipv6：16字节，128位
+
+  ![image-20231209144614520](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209144614520.png)
+
+  ![image-20231209145025380](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209145025380.png)
+
+  A：广域网
+
+  B：城域网
+
+  C：局域网
+
+  
+
+  Linux下设置ip命令
+
+  > ifocnfig ens 33 \<ip> netmask \<netmask>
+
+
+
+**桥接和NAT**
+
+- 桥接模式
+
+  虚拟机可以和同一局域网下的其它主机通信
+
+- NAT模式
+
+  虚拟机和同一局域网下的通信只能通过宿主机来完成
+
+
+
+**端口**
+
+用于标识应用程序（进程），不用进程号来标识是因为进程号在每次开机之后不一样，而端口是可重用的
+
+prot：2字节 0-65535
+
+0-1023：知名端口（不要用）
+
+自定义端口：1024-65535
+
+
+
+**OSI七层模型**
+
+![image-20231209151324007](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209151324007.png)
+
+- 物理层
+
+  定义物理设备标准
+
+- 数据链路层
+
+  负责收发数据（通过MAC地址区分给哪个主机）
+
+- 网络层
+
+  给两台主机提供路径选择（通过IP地址区分给哪个主机）
+
+- 传输层
+
+  区分数据递送到哪一个应用程序（通过port区分给哪个应用程序）
+
+- 会话层
+
+  建立连接
+
+- 表示层
+
+  解码
+
+- 应用层
+
+
+
+**TCP/IP模型**
+
+![image-20231209151942589](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209151942589.png)
+
+
+
+**协议**
+
+- 应用层协议
+
+  - FTP：文件传输协议
+  - HTTP：超文本传输协议
+  - NFS：网络文本系统
+
+- 传输层协议
+
+  - **TCP：传输控制协议**
+
+    ![image-20231209152934181](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209152934181.png)
+
+    ![image-20231209153114059](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209153114059.png)
+
+    ![image-20231209153323779](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209153323779.png)
+
+  - **UDP：用户数据报协议**
+
+    ![image-20231209152647230](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209152647230.png)
+
+- 网络层协议
+
+  - **IP：因特网互联协议**
+
+    ![image-20231209153343715](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209153343715.png)
+
+    ![image-20231209153604584](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209153604584.png)
+
+    ![image-20231209153620549](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209153620549.png)
+
+  - ICMP：因特网控制报文协议 ping
+
+  - IGMP：因特网组管理协议
+
+- 链路层协议
+
+  ![](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209153727079.png)
+
+  - **ARP：地址解析协议 通过IP地址找MAC地址**
+
+    ![image-20231209160225146](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209160225146.png)
+
+    ![image-20231209160333761](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209160333761.png)
+
+  - RARP：反向地址解析协议 通过MAC地址找IP地址
+
+**网络通信过程**
+
+![image-20231209155740338](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209155740338.png)
+
+
+
+**网络设计模式**
+
+- B/S：browser/server
+
+  服务器计算，性能较低，客户端安全，开发周期短
+
+- C/S：client/server
+
+  本地计算，性能更好，客户端容易篡改数据，开发周期较长
+
