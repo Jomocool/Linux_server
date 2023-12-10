@@ -5033,3 +5033,407 @@ prot：2字节 0-65535
 
   本地计算，性能更好，客户端容易篡改数据，开发周期较长
 
+
+
+### 2. Socket编程
+
+**Socket套接字**
+
+解决不同主机间进程通信的方法
+
+![image-20231209212504837](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209212504837.png)
+
+![image-20231209212714502](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209212714502.png)
+
+
+
+**网络字节序**
+
+小端：低位存于低地址
+
+大端：高位存于低地址
+
+![image-20231209213253176](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209213253176.png)
+
+
+
+**字节序转换**
+
+可调用库函数转换网络字节序和主机字节序
+
+```c
+#include <arpa/inet.h>
+
+// 主机字节序转网络字节序
+uint32_t htonl(uint32_t hostlong);// 4字节，转IP地址
+uint16_t htons(uint16_t hostshort);// 2字节，转端口
+
+//网络字节序转主机字节序
+uint32_t ntohl(uint32_t netlong);// 4字节
+uint16_t ntohs(uint16_t netshort);// 2字节
+```
+
+测试程序：
+
+```c
+#include <stdio.h>
+
+#include <arpa/inet.h>
+
+int main(void)
+{
+    char buf[4] = {192, 168, 1, 2};
+    int num = *(int *)buf;
+    int sum = htonl(num);
+    unsigned char *p = (unsigned char *)&sum;
+    printf("%d.%d.%d.%d\n", *p, *(p + 1), *(p + 2), *(p + 3));
+
+    unsigned short a = 0x0102;
+    unsigned short b = htons(a);
+
+    printf("%x\n", b);
+
+    return 0;
+}
+```
+
+> jomo@jomo-virtual-machine:~/linux_server/socket$ gcc htonl.c 
+> jomo@jomo-virtual-machine:~/linux_server/socket$ ./a.out 
+> 2.1.168.192
+> 201
+> jomo@jomo-virtual-machine:~/linux_server/socket$ 
+
+
+
+
+
+**IP地址转换**
+
+![image-20231209220149817](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231209220149817.png)
+
+```c
+#include <arpa/inet.h>
+int inet_pton(int af, const char *src, void *dst);
+
+功能：将点分十进制串转成32位网络大端的数据("192.168.1.2" ==> )
+参数：
+    af：
+    	AF_INET  IPV4
+    	AF_INET6 IPV6
+    src:点分十进制串的首地址
+    dst:32位网络数据的地址
+返回值：
+      1:成功
+      0:主机地址无效
+      -1:af不包含一个有效的地址，并且errno会被设置为EAFNOSUPPORT
+```
+
+```c
+#include <arpa/inet.h>
+const char *inet_ntop(int af, const void *src, char *dst, socketlen_t size) ;
+
+功能：将32位大端的网络数据转成点分十进制
+参数：
+    af：
+    	AF_INET  IPV4
+    	AF_INET6 IPV6
+    src:32位网络数据的地址
+    dst:点分十进制串的首地址
+    size:存储点分十进制串数组的大小(最大16字节即可，"255.255.255\0"(16字节))
+返回值：
+      存储点分十进制串数组首地址
+```
+
+测试程序：
+
+```c
+#include <stdio.h>
+#include <arpa/inet.h>
+
+int main(void)
+{
+    char buf[] = "192.168.1.4"; // 点分十进制串
+    unsigned int num = 0;
+    inet_pton(AF_INET, buf, &num);
+    unsigned char *p = (unsigned char *)&num;
+    printf("%d %d %d %d\n", *p, *(p + 1), *(p + 2), *(p + 3));
+
+    char ip[INET_ADDRSTRLEN] = "";
+    const char *ip_str = inet_ntop(AF_INET, &num, ip, INET_ADDRSTRLEN);
+    printf("%s\n", ip_str);
+
+    return 0;
+}
+```
+
+> jomo@jomo-virtual-machine:~/linux_server/socket$ gcc inet_pton.c 
+> jomo@jomo-virtual-machine:~/linux_server/socket$ ./a.out 
+> 192 168 1 4
+> 192.168.1.4
+> jomo@jomo-virtual-machine:~/linux_server/socket$ 
+
+
+
+**网络通信三大问题**
+
+协议、IP、端口，将这三个封装到sockaddr结构体中
+
+
+
+IPV4套接字结构体
+
+```c
+ struct sockaddr_in {
+     sa_family_t    sin_family; /* address family: AF_INET */
+     in_port_t      sin_port;   /* port in network byte order */
+     struct in_addr sin_addr;   /* internet address */
+ };
+
+/* Internet address. */
+struct in_addr {
+    uint32_t       s_addr;     /* address in network byte order */
+};
+```
+
+IPV6套接字结构体
+
+```c
+struct sockaddr_in6 {
+    sa_family_t     sin6_family;   /* AF_INET6 */
+    in_port_t       sin6_port;     /* port number */
+    uint32_t        sin6_flowinfo; /* IPv6 flow information */
+    struct in6_addr sin6_addr;     /* IPv6 address */
+    uint32_t        sin6_scope_id; /* Scope ID (new in 2.4) */
+};
+
+struct in6_addr {
+    unsigned char   s6_addr[16];   /* IPv6 address */
+};
+```
+
+通用套接字结构体
+
+```c
+struct sockaddr{
+    sa_family_t sa_family;	/*address family,AF_xxx*/
+    char sa_data[4];		/*14 bytes of protocol address*/
+}
+```
+
+调用send函数时，第二个参数需要把IPV4/6套接字结构体转成通用套接字结构体（把自己结构体的协议成员变量传给赋给通用套接字结构体的协议成员变量），这么做的目的是IPV4/6可以共用一个send函数，不需要为它们各写一个
+
+
+
+**TCP客户端**
+
+TCP协议特点：出错重传，每次发送数据对方收到后会回复ACK，可靠传输
+
+
+
+TCP是抽象打电话的模型：
+
+建立连接 使用连接 关闭连接
+
+![img](https://img-blog.csdnimg.cn/20200616161409442.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L01yX1hKQw==,size_16,color_FFFFFF,t_70)
+
+- 创建套接字
+
+  ```c
+  #include <sys/types.h>          /* See NOTES */
+  #include <sys/socket.h>
+  
+  int socket(int domain, int type, int protocol);
+  功能：
+      创建套接字
+  参数：
+      domain:AF_INET
+  	type:SOCK_STREAM 流式套接字，用于TCP通信
+  	protocol:0
+  返回值：
+       成功返回文件描述符
+       失败返回-1
+  ```
+
+- 连接服务器
+
+  ```c
+  #include <sys/types.h>          /* See NOTES */
+  #include <sys/socket.h>
+  
+  int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+  功能：
+      连接服务器
+  参数：
+      sockfd:socket套接字
+  	addr:IPV4套接字结构体的地址
+  	addrlen:IPV4套接字结构体的长度
+  返回值：
+       成功返回0
+       失败返回-1
+  ```
+
+客户端代码：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+int main(void)
+{
+    int sock_fd = -1;
+    // 创建套接字
+    sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    // 连接服务器
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080); // 端口转大端
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr.s_addr);
+    connect(sock_fd, (struct sockaddr *)&addr, sizeof(addr));
+
+    // 读写数据
+    char buf[1024] = "";
+    while (1)
+    {
+        bzero(buf, sizeof(buf));
+        int n = read(STDIN_FILENO, buf, sizeof(buf));
+        write(sock_fd, buf, n); // 发送数据给服务器
+    }
+
+    // 关闭连接
+    close(sock_fd);
+
+    return 0;
+}
+```
+
+
+
+**TCP服务器通信流程**
+
+![image-20231210222715850](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231210222715850.png)
+
+
+
+![image-20231210222622492](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231210222622492.png)
+
+- bind
+
+  ![image-20231210223019869](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231210223019869.png)
+
+- listen
+
+  ![image-20231210223132187](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231210223132187.png)
+
+- accept
+
+  ![image-20231210223824600](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231210223824600.png)
+
+
+
+**TCP服务器通信步骤**
+
+![image-20231210223653744](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231210223653744.png)
+
+
+
+**TCP服务器代码**
+
+客户端代码：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+int main(void)
+{
+    int sock_fd = -1;
+    // 创建套接字
+    sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    // 连接服务器
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080); // 端口转大端
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr.s_addr);
+    connect(sock_fd, (struct sockaddr *)&addr, sizeof(addr));
+
+    // 读写数据
+    char buf[1024] = "";
+    while (1)
+    {
+        bzero(buf, sizeof(buf));
+        int n = read(STDIN_FILENO, buf, sizeof(buf));
+        write(sock_fd, buf, n); // 发送数据给服务器
+    }
+
+    // 关闭连接
+    close(sock_fd);
+
+    return 0;
+}
+```
+
+服务器代码：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+int main(void)
+{
+    // 创建监听套接字
+    int lfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    // 绑定
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(8080);
+    // addr.sin_addr.s_addr = INADDR_ANY; // 绑定的是通配地址（本机所有IP）
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr.s_addr);
+    int ret = bind(lfd, (struct sockaddr *)&addr, sizeof(addr));
+    if(ret < 0){
+        perror("");
+        0;
+    }
+
+    // 监听
+    listen(lfd, 128); // 已完成连接队列和未完成连接队列的连接和最大值为128
+
+    // 提取
+    struct sockaddr_in cliaddr;
+    socklen_t len = sizeof(cliaddr);
+    int cfd = accept(lfd, (struct sockaddr *)&cliaddr, &len); // 获取连接套接字
+
+    // 读写
+    char buf[1024] = "";
+    while (1)
+    {
+        bzero(buf, sizeof(buf));
+        read(cfd, buf, sizeof(buf));
+        printf("Server received: %s", buf);
+    }
+
+    // 关闭
+    close(lfd);
+    close(cfd);
+
+    return 0;
+}
+```
+
+![image-20231210232938895](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231210232938895.png)
+
+上面的代码不稳定，因为并没有接收返回值并对其进行判断
