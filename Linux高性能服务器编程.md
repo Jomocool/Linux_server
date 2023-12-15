@@ -5422,7 +5422,7 @@ int main(void)
     while (1)
     {
         bzero(buf, sizeof(buf));
-        read(cfd, buf, sizeof(buf));
+        read(cfd, buf, sizeof(buf)); // 如果read返回值是0，代表客户端关闭了
         printf("Server received: %s", buf);
     }
 
@@ -5437,3 +5437,67 @@ int main(void)
 ![image-20231210232938895](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231210232938895.png)
 
 上面的代码不稳定，因为并没有接收返回值并对其进行判断
+
+
+
+**包裹函数**
+
+![image-20231211140601678](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231211140601678.png)
+
+
+
+![image-20231211140652942](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231211140652942.png)
+
+
+
+![image-20231211140856762](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231211140856762.png)
+
+
+
+![image-20231211140929249](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231211140929249.png)
+
+
+
+![image-20231211140936389](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231211140936389.png)
+
+
+
+函数名只是把原先的真正调用的函数名首字母大写而已，这样man Bind也可以查到bind，不区分大小写
+
+
+
+黏包：
+
+无法区分数据包的顺序
+
+
+
+![image-20231211141236352](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231211141236352.png)
+
+
+
+![image-20231211141258141](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231211141258141.png)
+
+
+
+![image-20231211141444864](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231211141444864.png)
+
+
+
+### 3. TCP
+
+**TCP通信时序**
+
+- **三次握手**：TCP建立连接的过程，只能由客户端发起连接
+
+  ![image-20231215231403420](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231215231403420.png)
+
+  确认序列号ack：既是确认收到对方的报文，也是期望下一次对方的序列号seq
+
+  ack=对方发送过来的序列号seq+标志位长度SYN(如果待确认的报文是SYN报文的话，长度是1，否则是0)+标志位长度FIN+数据长度
+
+- **四次挥手**：TCP断开连接的过程，客户端和服务端都可以发起断开
+
+  ![image-20231215234320749](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231215234320749.png)
+
+  只有主动方会等待关闭
