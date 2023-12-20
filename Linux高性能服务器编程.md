@@ -5501,3 +5501,159 @@ int main(void)
   ![image-20231215234320749](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231215234320749.png)
 
   只有主动方会等待关闭
+
+
+
+### 4. 滑动窗口
+
+**MSS**
+
+最大报文长度：一般出现在三次握手的前两次，用来告知对方发送数据的最大长度
+
+
+
+**MTU**
+
+最大传输单元 和网卡有关
+
+
+
+滑动窗口可以用来协商双方一次发送/接收的字节数，每一次读取数据后，回复的ACK报文中会携带当前缓冲区大小，用来告知对方
+
+
+
+### 5. 多进程并发服务器
+
+流程：
+
+1. 创建套接字
+
+2. 绑定
+
+3. 监听
+
+4. 提取：
+
+   while(1){
+
+   ​	提取连接
+
+   ​	fork创建子进程
+
+   ​	子进程中关闭lfd（监听套接字），服务客户端
+
+   ​	父进程中关闭cfd（连接套接字），回收子进程资源
+
+   }
+
+5. 关闭
+
+```c
+#include <stdio.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include "wrap.h"
+
+#include <signal.h>
+#include <sys/wait.h>
+#
+
+void freeprocess(int signum)
+{
+    pid_t pid;
+    while (1)
+    {
+        pid = waitpid(-1, NULL, WNOHANG);
+        if (pid <= 0)
+        {
+            // 小于0 => 子进程全部退出了
+            // 等于0 => 没有进程退出
+            break;
+        }
+        else
+        {
+            printf("child pid = %d\n", pid);
+        }
+    }
+}
+
+int main(void)
+{
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &set, NULL);
+
+    // 创建监听套接字，绑定所有本机IP的8000端口
+    int lfd = tcp4bind(8000, NULL);
+
+    // 监听
+    Listen(lfd, 128);
+
+    // 循环提取
+    // 回射
+    struct sockaddr_in cliaddr;
+    socklen_t len = sizeof(cliaddr);
+    while (1)
+    {
+        char ip[16] = "";
+        // 提取连接
+        int cfd = Accept(lfd, (struct sockaddr *)&cliaddr, &len);
+        printf("new client ip = %s port=%d\n", inet_ntop(AF_INET, &cliaddr.sin_addr.s_addr, ip, 16), ntohs(cliaddr.sin_port));
+
+        // fork创建子进程
+        pid_t pid;
+        pid = fork();
+        if (pid < 0)
+        {
+            perror("");
+            exit(0);
+        }
+        else if (pid == 0)
+        {
+            while (1)
+            {
+                // 子进程
+                // 关闭lfd
+                close(lfd);
+                char buf[1024] = "";
+                int n = read(cfd, buf, sizeof(buf));
+                if (n < 0)
+                {
+                    perror("");
+                    close(cfd);
+                    exit(0);
+                }
+                else if (n == 0) // 对方关闭
+                {
+                    printf("client close\n");
+                    close(cfd);
+                    break;
+                }
+                else
+                {
+                    printf("%s\n", buf);
+                    write(cfd, buf, n);
+                }
+            }
+        }
+        else
+        {
+            // 父进程
+            close(cfd);
+            // 回收
+            // 注册信号回调
+            // 注意考虑子进程在信号注册前挂掉的情况（先阻塞，注册完后再处理）
+            signal(SIGCHLD, freeprocess);
+
+            // 注册完后，解除阻塞
+            sigprocmask(SIG_UNBLOCK, &set, NULL);
+        }
+    }
+
+    // 关闭
+
+    return 0;
+}
+```
+
