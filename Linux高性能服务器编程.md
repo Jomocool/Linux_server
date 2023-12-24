@@ -5657,3 +5657,162 @@ int main(void)
 }
 ```
 
+
+
+### 6. 多线程并发服务器
+
+```c
+#include <stdio.h>
+#include <pthread.h>
+#include "wrap.h"
+
+typedef struct c_info
+{
+    int cfd;
+    struct sockaddr_in cliaddr;
+} CINFO;
+
+void *client_fun(void *arg)
+{
+    CINFO *info = (CINFO *)arg;
+    char ip[16] = "";
+    printf("new client ip=%s port=%d\n", inet_ntop(AF_INET, &(info->cliaddr.sin_addr.s_addr), ip, 16), ntohs(info->cliaddr.sin_port));
+
+    while (1)
+    {
+        char buf[1024] = "";
+        int count = 0;
+        count = read(info->cfd, buf, sizeof(buf));
+        if (count < 0)
+        {
+            perror("");
+            break;
+        }
+        else if (count == 0)
+        {
+            printf("client close\n");
+            break;
+        }
+        else
+        {
+            printf("%s\n", buf);
+            write(info->cfd, buf, count);
+        }
+    }
+    close(info->cfd);
+    free(info);
+}
+
+int main(int argc, char *argv[])
+{
+    if (argc < 2)
+    {
+        printf("argc<2???\n  ./a.out 8000 \n");
+        return 0;
+    }
+
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED); // 设置线程退出自动释放资源
+
+    short port = atoi(argv[1]);
+    int lfd = tcp4bind(port, NULL); // 创建套接字，绑定
+
+    struct sockaddr_in cliaddr;
+    socklen_t len = sizeof(cliaddr);
+    Listen(lfd, 128);
+    CINFO *info;
+    while (1)
+    {
+        int cfd = Accept(lfd, (struct sockaddr *)&cliaddr, &len);
+        pthread_t pthid;
+        // 新来一个客户端就新开辟堆空间存储客户端信息，防止多个线程共用同一个info，导致覆盖问题
+        info = malloc(sizeof(CINFO));
+        info->cfd = cfd;
+        info->cliaddr = cliaddr;
+        pthread_create(&pthid, &attr, client_fun, info);
+    }
+
+    return 0;
+}
+```
+
+### 7. TCP状态转换
+
+![TCP状态转换图](https://img-blog.csdn.net/20160423144456154)
+
+
+
+![image-20231223125029731](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231223125029731.png)
+
+
+
+**半关闭**
+
+![image-20231223130019478](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231223130019478.png)
+
+
+
+### 8. 心跳包
+
+如果对方异常断开，本机检测不到，一直等待，浪费资源
+
+需要设置TCP的保持连接，作用就是每隔一定的时间间隔发送探测分节，如果连续发送多个还未收到对方的回复，就将此连接断开
+
+
+
+![image-20231224113326608](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224113326608.png)
+
+![image-20231224113252674](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224113252674.png)
+
+
+
+![image-20231224113101261](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224113101261.png)
+
+![image-20231224113146559](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224113146559.png)
+
+
+
+**乒乓包：**携带比较多的数据的心跳包
+
+
+
+### 9. 端口复用
+
+端口重新启用
+
+注意：程序中设置某个端口重新使用，在这之前的其他网络程序将不能使用这个端口
+
+
+
+![image-20231224114156895](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224114156895.png)
+
+
+
+### 10.多路IO转接技术
+
+**高并发服务器：**
+
+1. 阻塞等待：每个进/线程都在等待客户端发送消息，消耗资源
+
+2. 非阻塞忙轮询：
+
+   消耗CPU
+
+   ![image-20231224115101372](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224115101372.png)
+
+3. 多路IO转接（多路IO复用）：
+
+   ![image-20231224115722972](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224115722972.png)
+
+   内核监听多个文件描述符的属性（读写缓冲区）变化
+
+   如果某个文件描述符的读缓冲区变化了，这个时候就可以读了，将这个事件告知应用层![image-20231224115420179](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224115420179.png)
+
+
+
+### 11. selectAPI
+
+![image-20231224120314420](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231224120314420.png)
+
+**注意：**变化的文件描述符会存在监听的集合中，未变化的文件描述符会被删除，所以下次监听的时候，需要把那些被删除的文件描述符重新加入集合中
