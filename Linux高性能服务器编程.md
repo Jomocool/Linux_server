@@ -5938,3 +5938,27 @@ int main(int argc, void *argv)
 
 
 
+
+
+### 15. poll
+
+优点：相较于select没有最大1024文件描述符限制，请求和返回是分离的
+
+![image-20231227103044719](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231227103044719.png)
+
+
+
+### 16. poll API
+
+![image-20231227103338008](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231227103338008.png)
+
+```c
+数组元素：
+struct pollfd {
+    int   fd;         /* file descriptor */ 需要监听的文件描述符
+    short events;     /* requested events */ 需要监听文件描述符什么事件 POLLIN读事件 POLLOUT写事件
+    short revents;    /* returned events */ 返回监听到的事件 POLLIN读事件 POLLOUT写事件
+};
+```
+
+![image-20231227105141726](https://md-jomo.oss-cn-guangzhou.aliyuncs.com/IMG/image-20231227105141726.png)
